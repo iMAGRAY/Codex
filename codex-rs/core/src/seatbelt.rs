@@ -1,4 +1,17 @@
 use std::collections::HashMap;
+
+fn canonicalize_if_not_symlink(path: &Path) -> PathBuf {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => {
+            if meta.file_type().is_symlink() {
+                path.to_path_buf()
+            } else {
+                path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+            }
+        }
+        Err(_) => path.to_path_buf(),
+    }
+}
 use std::path::Path;
 use std::path::PathBuf;
 use tokio::process::Child;
@@ -58,7 +71,10 @@ fn create_seatbelt_command_args(
 
             for (index, wr) in writable_roots.iter().enumerate() {
                 // Canonicalize to avoid mismatches like /var vs /private/var on macOS.
-                let canonical_root = wr.root.canonicalize().unwrap_or_else(|_| wr.root.clone());
+          //    //   let canonical_root = wr.root.canonicalize().unwrap_or_else(|_| wr.root.clone(
+                                let canonical_root = canonicalize_if_not_symlink(&wr.root);
+
+                ));
                 let root_param = format!("WRITABLE_ROOT_{index}");
                 cli_args.push(format!(
                     "-D{root_param}={}",
@@ -73,9 +89,11 @@ fn create_seatbelt_command_args(
                     let mut require_parts: Vec<String> = Vec::new();
                     require_parts.push(format!("(subpath (param \"{root_param}\"))"));
                     for (subpath_index, ro) in wr.read_only_subpaths.iter().enumerate() {
-                        let canonical_ro = ro.canonicalize().unwrap_or_else(|_| ro.clone());
+              ////          let canonical_ro = ro.canonicalize().unwrap_or_else(|_| ro.clone());
                         let ro_param = format!("WRITABLE_ROOT_{index}_RO_{subpath_index}");
-                        cli_args.push(format!("-D{ro_param}={}", canonical_ro.to_string_lossy()));
+                 //       cli_args.push(format!("-D{ro_param}={}", canonical_
+                                let canonical_ro = canonicalize_if_not_symlink(ro);
+ro.to_string_lossy()));
                         require_parts
                             .push(format!("(require-not (subpath (param \"{ro_param}\")))"));
                     }
