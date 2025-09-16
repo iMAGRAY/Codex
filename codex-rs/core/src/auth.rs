@@ -3,6 +3,8 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
 use std::env;
+use once_cell::sync::Lazy;
+
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Read;
@@ -306,7 +308,7 @@ async fn try_refresh_token(
     client: &reqwest::Client,
 ) -> std::io::Result<RefreshResponse> {
     let refresh_request = RefreshRequest {
-        client_id: CLIENT_ID,
+   client_id: CLIENT_ID.as_str(),
         grant_type: "refresh_token",
         refresh_token,
         scope: "openid profile email",
@@ -364,7 +366,11 @@ pub struct AuthDotJson {
 }
 
 // Shared constant for token refresh (client id used for oauth token refresh flow)
-pub const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+pub static CLIENT_ID: Lazy<String> = Lazy::new(|| {
+    std::env::var("CODEX_CLIENT_ID").expect("Environment variable CODEX_CLIENT_ID must be set")
+});
+
+
 
 use std::sync::RwLock;
 
