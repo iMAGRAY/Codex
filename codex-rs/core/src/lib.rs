@@ -62,6 +62,7 @@ mod rollout;
 pub(crate) mod safety;
 pub mod seatbelt;
 pub mod shell;
+mod process_death;
 pub mod spawn;
 pub mod terminal;
 mod tool_apply_patch;
