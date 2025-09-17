@@ -1,3 +1,5 @@
+pub mod migrations;
+
 use crate::config_loader::LoadedConfigLayers;
 pub use crate::config_loader::load_config_as_toml;
 use crate::config_loader::load_config_layers_with_overrides;
@@ -7,6 +9,7 @@ use crate::config_types::DEFAULT_OTEL_ENVIRONMENT;
 use crate::config_types::History;
 use crate::config_types::McpServerConfig;
 use crate::config_types::McpServerTransportConfig;
+use crate::config_types::McpTemplate;
 use crate::config_types::Notifications;
 use crate::config_types::OtelConfig;
 use crate::config_types::OtelConfigToml;
@@ -28,8 +31,6 @@ use crate::model_family::find_family_for_model;
 use crate::model_provider_info::ModelProviderInfo;
 use crate::model_provider_info::built_in_model_providers;
 use crate::openai_model_info::get_model_info;
-use crate::project_doc::DEFAULT_PROJECT_DOC_FILENAME;
-use crate::project_doc::LOCAL_PROJECT_DOC_FILENAME;
 use crate::protocol::AskForApproval;
 use crate::protocol::SandboxPolicy;
 use anyhow::Context;
@@ -49,6 +50,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use tempfile::NamedTempFile;
+use tokio::runtime::Handle;
 use toml::Value as TomlValue;
 use toml_edit::Array as TomlArray;
 use toml_edit::DocumentMut;
@@ -150,6 +152,15 @@ pub struct Config {
 
     /// Definition for MCP servers that Codex can reach out to for tool calls.
     pub mcp_servers: HashMap<String, McpServerConfig>,
+
+    /// Optional templates leveraged by the MCP wizard experience.
+    pub mcp_templates: HashMap<String, McpTemplate>,
+
+    /// Schema version for MCP configuration blocks as declared on disk.
+    pub mcp_schema_version: Option<u32>,
+
+    /// Feature flag indicating whether overhaul-specific behaviours are enabled.
+    pub experimental_mcp_overhaul: bool,
 
     /// Preferred store for MCP OAuth credentials.
     /// keyring: Use an OS-specific keyring service.
@@ -314,7 +325,7 @@ fn apply_overlays(
     base
 }
 
-pub async fn load_global_mcp_servers(
+async fn load_global_mcp_servers_inner(
     codex_home: &Path,
 ) -> std::io::Result<BTreeMap<String, McpServerConfig>> {
     let root_value = load_config_as_toml(codex_home).await?;
@@ -328,6 +339,27 @@ pub async fn load_global_mcp_servers(
         .clone()
         .try_into()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
+pub async fn load_global_mcp_servers(
+    codex_home: &Path,
+) -> std::io::Result<BTreeMap<String, McpServerConfig>> {
+    load_global_mcp_servers_inner(codex_home).await
+}
+
+pub fn load_global_mcp_servers_blocking(
+    codex_home: &Path,
+) -> std::io::Result<BTreeMap<String, McpServerConfig>> {
+    match Handle::try_current() {
+        Ok(handle) => handle.block_on(load_global_mcp_servers_inner(codex_home)),
+        Err(_) => {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+            runtime.block_on(load_global_mcp_servers_inner(codex_home))
+        }
+    }
 }
 
 /// We briefly allowed plain text bearer_token fields in MCP server configs.
@@ -374,6 +406,23 @@ pub fn write_global_mcp_servers(
         for (name, config) in servers {
             let mut entry = TomlTable::new();
             entry.set_implicit(false);
+
+            if let Some(display_name) = &config.display_name {
+                entry["display_name"] = toml_edit::value(display_name.clone());
+            }
+
+            if let Some(category) = &config.category {
+                entry["category"] = toml_edit::value(category.clone());
+            }
+
+            if let Some(template_id) = &config.template_id {
+                entry["template_id"] = toml_edit::value(template_id.clone());
+            }
+
+            if let Some(description) = &config.description {
+                entry["description"] = toml_edit::value(description.clone());
+            }
+
             match &config.transport {
                 McpServerTransportConfig::Stdio { command, args, env } => {
                     entry["command"] = toml_edit::value(command.clone());
@@ -420,6 +469,102 @@ pub fn write_global_mcp_servers(
 
             if let Some(timeout) = config.tool_timeout_sec {
                 entry["tool_timeout_sec"] = toml_edit::value(timeout.as_secs_f64());
+            }
+
+            if let Some(auth) = &config.auth {
+                let mut auth_table = TomlTable::new();
+                auth_table.set_implicit(false);
+                if let Some(kind) = &auth.kind {
+                    auth_table["type"] = toml_edit::value(kind.clone());
+                }
+                if let Some(secret_ref) = &auth.secret_ref {
+                    auth_table["secret_ref"] = toml_edit::value(secret_ref.clone());
+                }
+                if let Some(env) = &auth.env
+                    && !env.is_empty()
+                {
+                    let mut env_table = TomlTable::new();
+                    env_table.set_implicit(false);
+                    let mut pairs: Vec<_> = env.iter().collect();
+                    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+                    for (key, value) in pairs {
+                        env_table.insert(key, toml_edit::value(value.clone()));
+                    }
+                    auth_table["env"] = TomlItem::Table(env_table);
+                }
+                entry["auth"] = TomlItem::Table(auth_table);
+            }
+
+            if let Some(health) = &config.healthcheck {
+                let mut health_table = TomlTable::new();
+                health_table.set_implicit(false);
+                if let Some(kind) = &health.kind {
+                    health_table["type"] = toml_edit::value(kind.clone());
+                }
+                if let Some(command) = &health.command {
+                    health_table["command"] = toml_edit::value(command.clone());
+                }
+                if !health.args.is_empty() {
+                    let mut args = TomlArray::new();
+                    for arg in &health.args {
+                        args.push(arg.clone());
+                    }
+                    health_table["args"] = TomlItem::Value(args.into());
+                }
+                if let Some(timeout) = health.timeout_ms {
+                    let timeout = i64::try_from(timeout).map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "healthcheck.timeout_ms exceeds supported range",
+                        )
+                    })?;
+                    health_table["timeout_ms"] = toml_edit::value(timeout);
+                }
+                if let Some(interval) = health.interval_seconds {
+                    let interval = i64::try_from(interval).map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "healthcheck.interval_seconds exceeds supported range",
+                        )
+                    })?;
+                    health_table["interval_seconds"] = toml_edit::value(interval);
+                }
+                if let Some(endpoint) = &health.endpoint {
+                    health_table["endpoint"] = toml_edit::value(endpoint.clone());
+                }
+                if let Some(protocol) = &health.protocol {
+                    health_table["protocol"] = toml_edit::value(protocol.clone());
+                }
+                entry["healthcheck"] = TomlItem::Table(health_table);
+            }
+
+            if !config.tags.is_empty() {
+                let mut tags = TomlArray::new();
+                for tag in &config.tags {
+                    tags.push(tag.clone());
+                }
+                entry["tags"] = TomlItem::Value(tags.into());
+            }
+
+            if let Some(created_at) = &config.created_at {
+                entry["created_at"] = toml_edit::value(created_at.clone());
+            }
+
+            if let Some(last_verified_at) = &config.last_verified_at {
+                entry["last_verified_at"] = toml_edit::value(last_verified_at.clone());
+            }
+
+            if let Some(metadata) = &config.metadata
+                && !metadata.is_empty()
+            {
+                let mut metadata_table = TomlTable::new();
+                metadata_table.set_implicit(false);
+                let mut entries: Vec<_> = metadata.iter().collect();
+                entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+                for (key, value) in entries {
+                    metadata_table.insert(key, toml_edit::value(value.clone()));
+                }
+                entry["metadata"] = TomlItem::Table(metadata_table);
             }
 
             doc["mcp_servers"][name.as_str()] = TomlItem::Table(entry);
@@ -745,6 +890,13 @@ pub struct ConfigToml {
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
 
+    /// Templates that can seed MCP server configuration via wizard flows.
+    #[serde(default)]
+    pub mcp_templates: HashMap<String, McpTemplate>,
+
+    /// Schema version for MCP-related configuration.
+    pub mcp_schema_version: Option<u32>,
+
     /// Preferred backend for storing MCP OAuth credentials.
     /// keyring: Use an OS-specific keyring service.
     ///          https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/oauth.rs#L2
@@ -803,6 +955,16 @@ pub struct ConfigToml {
     /// Base URL for requests to ChatGPT (as opposed to the OpenAI API).
     pub chatgpt_base_url: Option<String>,
 
+    /// Legacy, now use features
+    pub experimental_instructions_file: Option<PathBuf>,
+    pub experimental_use_exec_command_tool: Option<bool>,
+    pub experimental_use_unified_exec_tool: Option<bool>,
+    pub experimental_use_rmcp_client: Option<bool>,
+    pub experimental_use_freeform_apply_patch: Option<bool>,
+
+    #[serde(default)]
+    pub experimental: Option<ExperimentalConfigToml>,
+
     pub projects: Option<HashMap<String, ProjectConfig>>,
 
     /// Nested tools section for feature toggles
@@ -822,13 +984,6 @@ pub struct ConfigToml {
 
     /// Tracks whether the Windows onboarding screen has been acknowledged.
     pub windows_wsl_setup_acknowledged: Option<bool>,
-
-    /// Legacy, now use features
-    pub experimental_instructions_file: Option<PathBuf>,
-    pub experimental_use_exec_command_tool: Option<bool>,
-    pub experimental_use_unified_exec_tool: Option<bool>,
-    pub experimental_use_rmcp_client: Option<bool>,
-    pub experimental_use_freeform_apply_patch: Option<bool>,
 }
 
 impl From<ConfigToml> for UserSavedConfig {
@@ -857,6 +1012,12 @@ impl From<ConfigToml> for UserSavedConfig {
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProjectConfig {
     pub trust_level: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct ExperimentalConfigToml {
+    #[serde(default)]
+    pub mcp_overhaul: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default, PartialEq)]
@@ -1079,6 +1240,12 @@ impl Config {
         let use_experimental_unified_exec_tool = features.enabled(Feature::UnifiedExec);
         let use_experimental_use_rmcp_client = features.enabled(Feature::RmcpClient);
 
+        let experimental_mcp_overhaul = cfg
+            .experimental
+            .as_ref()
+            .and_then(|exp| exp.mcp_overhaul)
+            .unwrap_or(false);
+
         let model = model
             .or(config_profile.model)
             .or(cfg.model)
@@ -1125,15 +1292,6 @@ impl Config {
             .or(cfg.review_model)
             .unwrap_or_else(default_review_model);
 
-        let mut approval_policy = approval_policy
-            .or(config_profile.approval_policy)
-            .or(cfg.approval_policy)
-            .unwrap_or_else(AskForApproval::default);
-
-        if features.enabled(Feature::ApproveAll) {
-            approval_policy = AskForApproval::OnRequest;
-        }
-
         let config = Self {
             model,
             review_model,
@@ -1144,13 +1302,19 @@ impl Config {
             model_provider_id,
             model_provider,
             cwd: resolved_cwd,
-            approval_policy,
+            approval_policy: approval_policy
+                .or(config_profile.approval_policy)
+                .or(cfg.approval_policy)
+                .unwrap_or_else(AskForApproval::default),
             sandbox_policy,
             shell_environment_policy,
             notify: cfg.notify,
             user_instructions,
             base_instructions,
             mcp_servers: cfg.mcp_servers,
+            mcp_templates: cfg.mcp_templates,
+            mcp_schema_version: cfg.mcp_schema_version,
+            experimental_mcp_overhaul,
             // The config.toml omits "_mode" because it's a config file. However, "_mode"
             // is important in code to differentiate the mode from the store implementation.
             mcp_oauth_credentials_store_mode: cfg.mcp_oauth_credentials_store.unwrap_or_default(),
@@ -1225,18 +1389,20 @@ impl Config {
     }
 
     fn load_instructions(codex_dir: Option<&Path>) -> Option<String> {
-        let base = codex_dir?;
-        for candidate in [LOCAL_PROJECT_DOC_FILENAME, DEFAULT_PROJECT_DOC_FILENAME] {
-            let mut path = base.to_path_buf();
-            path.push(candidate);
-            if let Ok(contents) = std::fs::read_to_string(&path) {
-                let trimmed = contents.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
+        let mut p = match codex_dir {
+            Some(p) => p.to_path_buf(),
+            None => return None,
+        };
+
+        p.push("AGENTS.md");
+        std::fs::read_to_string(&p).ok().and_then(|s| {
+            let s = s.trim();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
             }
-        }
-        None
+        })
     }
 
     fn get_base_instructions(
@@ -1439,26 +1605,6 @@ exclude_slash_tmp = true
     }
 
     #[test]
-    fn approve_all_feature_forces_on_request_policy() -> std::io::Result<()> {
-        let cfg = r#"
-[features]
-approve_all = true
-"#;
-        let parsed = toml::from_str::<ConfigToml>(cfg)
-            .expect("TOML deserialization should succeed for approve_all feature");
-        let temp_dir = TempDir::new()?;
-        let config = Config::load_from_base_config_with_overrides(
-            parsed,
-            ConfigOverrides::default(),
-            temp_dir.path().to_path_buf(),
-        )?;
-
-        assert!(config.features.enabled(Feature::ApproveAll));
-        assert_eq!(config.approval_policy, AskForApproval::OnRequest);
-        Ok(())
-    }
-
-    #[test]
     fn config_defaults_to_auto_oauth_store_mode() -> std::io::Result<()> {
         let codex_home = TempDir::new()?;
         let cfg = ConfigToml::default();
@@ -1639,6 +1785,8 @@ approve_all = true
         let codex_home = TempDir::new()?;
 
         let mut servers = BTreeMap::new();
+        let mut metadata = HashMap::new();
+        metadata.insert("scope".to_string(), "docs".to_string());
         servers.insert(
             "docs".to_string(),
             McpServerConfig {
@@ -1647,6 +1795,16 @@ approve_all = true
                     args: vec!["hello".to_string()],
                     env: None,
                 },
+                display_name: Some("Documentation".to_string()),
+                category: Some("internal".to_string()),
+                template_id: Some("default".to_string()),
+                description: Some("Docs indexing server".to_string()),
+                auth: None,
+                healthcheck: None,
+                created_at: Some("2025-01-01T00:00:00Z".to_string()),
+                last_verified_at: None,
+                tags: vec!["search".to_string()],
+                metadata: Some(metadata),
                 enabled: true,
                 startup_timeout_sec: Some(Duration::from_secs(3)),
                 tool_timeout_sec: Some(Duration::from_secs(5)),
@@ -1669,6 +1827,18 @@ approve_all = true
         assert_eq!(docs.startup_timeout_sec, Some(Duration::from_secs(3)));
         assert_eq!(docs.tool_timeout_sec, Some(Duration::from_secs(5)));
         assert!(docs.enabled);
+        assert_eq!(docs.display_name.as_deref(), Some("Documentation"));
+        assert_eq!(docs.category.as_deref(), Some("internal"));
+        assert_eq!(docs.template_id.as_deref(), Some("default"));
+        assert_eq!(docs.description.as_deref(), Some("Docs indexing server"));
+        assert_eq!(docs.tags, vec!["search".to_string()]);
+        assert_eq!(
+            docs.metadata
+                .as_ref()
+                .and_then(|m| m.get("scope"))
+                .map(String::as_str),
+            Some("docs")
+        );
 
         let empty = BTreeMap::new();
         write_global_mcp_servers(codex_home.path(), &empty)?;
@@ -1773,9 +1943,7 @@ bearer_token = "secret"
                         ("ALPHA_VAR".to_string(), "1".to_string()),
                     ])),
                 },
-                enabled: true,
-                startup_timeout_sec: None,
-                tool_timeout_sec: None,
+                ..McpServerConfig::default()
             },
         )]);
 
@@ -1824,9 +1992,8 @@ ZIG_VAR = "3"
                     url: "https://example.com/mcp".to_string(),
                     bearer_token_env_var: Some("MCP_TOKEN".to_string()),
                 },
-                enabled: true,
                 startup_timeout_sec: Some(Duration::from_secs(2)),
-                tool_timeout_sec: None,
+                ..McpServerConfig::default()
             },
         )]);
 
@@ -1864,9 +2031,7 @@ startup_timeout_sec = 2.0
                     url: "https://example.com/mcp".to_string(),
                     bearer_token_env_var: None,
                 },
-                enabled: true,
-                startup_timeout_sec: None,
-                tool_timeout_sec: None,
+                ..McpServerConfig::default()
             },
         );
         write_global_mcp_servers(codex_home.path(), &servers)?;
@@ -1908,8 +2073,7 @@ url = "https://example.com/mcp"
                     env: None,
                 },
                 enabled: false,
-                startup_timeout_sec: None,
-                tool_timeout_sec: None,
+                ..McpServerConfig::default()
             },
         )]);
 
@@ -2226,6 +2390,9 @@ model_verbosity = "high"
                 notify: None,
                 cwd: fixture.cwd(),
                 mcp_servers: HashMap::new(),
+                mcp_templates: HashMap::new(),
+                mcp_schema_version: None,
+                experimental_mcp_overhaul: false,
                 mcp_oauth_credentials_store_mode: Default::default(),
                 model_providers: fixture.model_provider_map.clone(),
                 project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
@@ -2290,6 +2457,9 @@ model_verbosity = "high"
             notify: None,
             cwd: fixture.cwd(),
             mcp_servers: HashMap::new(),
+            mcp_templates: HashMap::new(),
+            mcp_schema_version: None,
+            experimental_mcp_overhaul: false,
             mcp_oauth_credentials_store_mode: Default::default(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
@@ -2369,6 +2539,9 @@ model_verbosity = "high"
             notify: None,
             cwd: fixture.cwd(),
             mcp_servers: HashMap::new(),
+            mcp_templates: HashMap::new(),
+            mcp_schema_version: None,
+            experimental_mcp_overhaul: false,
             mcp_oauth_credentials_store_mode: Default::default(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
@@ -2434,6 +2607,9 @@ model_verbosity = "high"
             notify: None,
             cwd: fixture.cwd(),
             mcp_servers: HashMap::new(),
+            mcp_templates: HashMap::new(),
+            mcp_schema_version: None,
+            experimental_mcp_overhaul: false,
             mcp_oauth_credentials_store_mode: Default::default(),
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,

@@ -20,6 +20,36 @@ pub struct McpServerConfig {
     #[serde(flatten)]
     pub transport: McpServerTransportConfig,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_id: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<McpAuthConfig>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthcheck: Option<McpHealthcheckConfig>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_verified_at: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+
     /// When `false`, Codex skips initializing this MCP server.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
@@ -62,6 +92,28 @@ impl<'de> Deserialize<'de> for McpServerConfig {
             tool_timeout_sec: Option<Duration>,
             #[serde(default)]
             enabled: Option<bool>,
+            #[serde(default)]
+            tool_timeout_ms: Option<u64>,
+            #[serde(default)]
+            display_name: Option<String>,
+            #[serde(default)]
+            category: Option<String>,
+            #[serde(default)]
+            template_id: Option<String>,
+            #[serde(default)]
+            description: Option<String>,
+            #[serde(default)]
+            auth: Option<McpAuthConfig>,
+            #[serde(default)]
+            healthcheck: Option<McpHealthcheckConfig>,
+            #[serde(default)]
+            tags: Option<Vec<String>>,
+            #[serde(default)]
+            created_at: Option<String>,
+            #[serde(default)]
+            last_verified_at: Option<String>,
+            #[serde(default)]
+            metadata: Option<HashMap<String, String>>,
         }
 
         let raw = RawMcpServerConfig::deserialize(deserializer)?;
@@ -129,11 +181,27 @@ impl<'de> Deserialize<'de> for McpServerConfig {
             _ => return Err(SerdeError::custom("invalid transport")),
         };
 
+        let tool_timeout_sec = match (raw.tool_timeout_sec, raw.tool_timeout_ms) {
+            (Some(duration), _) => Some(duration),
+            (None, Some(ms)) => Some(Duration::from_millis(ms)),
+            (None, None) => None,
+        };
+
         Ok(Self {
             transport,
-            startup_timeout_sec,
-            tool_timeout_sec: raw.tool_timeout_sec,
+            display_name: raw.display_name,
+            category: raw.category,
+            template_id: raw.template_id,
+            description: raw.description,
+            auth: raw.auth,
+            healthcheck: raw.healthcheck,
+            created_at: raw.created_at,
+            last_verified_at: raw.last_verified_at,
+            tags: raw.tags.unwrap_or_default(),
+            metadata: raw.metadata,
             enabled: raw.enabled.unwrap_or_else(default_enabled),
+            startup_timeout_sec,
+            tool_timeout_sec,
         })
     }
 }
@@ -162,6 +230,91 @@ pub enum McpServerTransportConfig {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bearer_token_env_var: Option<String>,
     },
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct McpAuthConfig {
+    #[serde(default, rename = "type")]
+    pub kind: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_ref: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct McpHealthcheckConfig {
+    #[serde(default, rename = "type")]
+    pub kind: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interval_seconds: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct McpTemplate {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defaults: Option<McpTemplateDefaults>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct McpTemplateDefaults {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<McpAuthConfig>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healthcheck: Option<McpHealthcheckConfig>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub startup_timeout_ms: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
 }
 
 mod option_duration_secs {
