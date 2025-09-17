@@ -5,6 +5,7 @@ use tokio::process::Child;
 use tokio::process::Command;
 use tracing::trace;
 
+use crate::process_death;
 use crate::protocol::SandboxPolicy;
 
 /// Experimental environment variable that will be set to some non-empty value
@@ -62,28 +63,17 @@ pub(crate) async fn spawn_child_async(
 
     // If this Codex process dies (including being killed via SIGKILL), we want
     // any child processes that were spawned as part of a `"shell"` tool call
-    // to also be terminated.
-
-    // This relies on prctl(2), so it only works on Linux.
-    #[cfg(target_os = "linux")]
-    unsafe {
-        cmd.pre_exec(|| {
-            // This prctl call effectively requests, "deliver SIGTERM when my
-            // current parent dies."
-            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-
-            // Though if there was a race condition and this pre_exec() block is
-            // run _after_ the parent (i.e., the Codex process) has already
-            // exited, then the parent is the _init_ process (which will never
-            // die), so we should just terminate the child process now.
-            if libc::getppid() == 1 {
-                libc::raise(libc::SIGTERM);
-            }
-            Ok(())
+  
+        let parent_pid = unsafe { libc::getpid() };
+// to also be terminated.
+// This relies on sending a SIGTERM when the parent dies.
+#[cfg(target_os = "linux")]
+{
+        cmd.pre_exec(move || {
+            process_death::set_parent_death(parent_pid)
         });
-    }
+}
+  }
 
     match stdio_policy {
         StdioPolicy::RedirectForShellTool => {
