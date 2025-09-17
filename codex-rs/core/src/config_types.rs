@@ -5,6 +5,7 @@
 
 use serde::Deserializer;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::Duration;
 use wildmatch::WildMatchPattern;
@@ -65,6 +66,117 @@ pub struct McpServerConfig {
     /// Default timeout for MCP tool calls initiated via this server.
     #[serde(default, with = "option_duration_secs")]
     pub tool_timeout_sec: Option<Duration>,
+}
+
+impl Default for McpServerConfig {
+    fn default() -> Self {
+        Self {
+            transport: McpServerTransportConfig::Stdio {
+                command: String::new(),
+                args: Vec::new(),
+                env: None,
+            },
+            display_name: None,
+            category: None,
+            template_id: None,
+            description: None,
+            auth: None,
+            healthcheck: None,
+            created_at: None,
+            last_verified_at: None,
+            tags: Vec::new(),
+            metadata: None,
+            enabled: true,
+            startup_timeout_sec: None,
+            tool_timeout_sec: None,
+        }
+    }
+}
+
+impl McpServerConfig {
+    /// Return stdio transport details (command, args, env) if configured.
+    pub fn stdio_details(
+        &self,
+    ) -> Option<(&String, &Vec<String>, Option<&HashMap<String, String>>)> {
+        match &self.transport {
+            McpServerTransportConfig::Stdio { command, args, env } => {
+                Some((command, args, env.as_ref()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Ensure the transport is stdio and return mutable accessors.
+    pub fn ensure_stdio_mut(
+        &mut self,
+    ) -> (
+        &mut String,
+        &mut Vec<String>,
+        &mut Option<HashMap<String, String>>,
+    ) {
+        if !matches!(self.transport, McpServerTransportConfig::Stdio { .. }) {
+            self.transport = McpServerTransportConfig::Stdio {
+                command: String::new(),
+                args: Vec::new(),
+                env: None,
+            };
+        }
+
+        match &mut self.transport {
+            McpServerTransportConfig::Stdio { command, args, env } => (command, args, env),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn set_stdio_transport(
+        &mut self,
+        command: String,
+        args: Vec<String>,
+        env: Option<HashMap<String, String>>,
+    ) {
+        self.transport = McpServerTransportConfig::Stdio { command, args, env };
+    }
+
+    pub fn streamable_http_details(&self) -> Option<(&String, Option<&String>)> {
+        match &self.transport {
+            McpServerTransportConfig::StreamableHttp {
+                url,
+                bearer_token_env_var,
+            } => Some((url, bearer_token_env_var.as_ref())),
+            _ => None,
+        }
+    }
+
+    pub fn set_streamable_http_transport(
+        &mut self,
+        url: String,
+        bearer_token_env_var: Option<String>,
+    ) {
+        self.transport = McpServerTransportConfig::StreamableHttp {
+            url,
+            bearer_token_env_var,
+        };
+    }
+
+    pub fn startup_timeout_ms(&self) -> Option<u64> {
+        self.startup_timeout_sec
+            .map(|duration| duration.as_millis())
+            .and_then(|ms| u64::try_from(ms).ok())
+    }
+
+    pub fn set_startup_timeout_ms(&mut self, timeout_ms: Option<u64>) {
+        self.startup_timeout_sec = timeout_ms.map(Duration::from_millis);
+    }
+
+    pub fn tool_timeout_ms(&self) -> Option<u64> {
+        self.tool_timeout_sec
+            .map(|duration| duration.as_millis())
+            .and_then(|ms| u64::try_from(ms).ok())
+    }
+
+    pub fn set_tool_timeout_ms(&mut self, timeout_ms: Option<u64>) {
+        self.tool_timeout_sec = timeout_ms.map(Duration::from_millis);
+    }
 }
 
 impl<'de> Deserialize<'de> for McpServerConfig {
@@ -232,7 +344,6 @@ pub enum McpServerTransportConfig {
     },
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct McpAuthConfig {
     #[serde(default, rename = "type")]
@@ -309,6 +420,9 @@ pub struct McpTemplateDefaults {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_timeout_ms: Option<u64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_timeout_ms: Option<u64>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -606,6 +720,7 @@ pub enum ReasoningSummaryFormat {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use std::time::Duration;
 
     #[test]
     fn deserialize_stdio_command_server_config() {
@@ -758,5 +873,32 @@ mod tests {
             err.to_string().contains("bearer_token is not supported"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn deserialize_tool_timeout_ms_converts_to_duration() {
+        let cfg: McpServerConfig = toml::from_str(
+            r#"
+            command = "echo"
+            tool_timeout_ms = 1500
+        "#,
+        )
+        .expect("should deserialize tool_timeout_ms");
+
+        assert_eq!(cfg.tool_timeout_ms(), Some(1500));
+        assert_eq!(cfg.tool_timeout_sec, Some(Duration::from_millis(1500)));
+    }
+
+    #[test]
+    fn deserialize_tool_timeout_sec_converts_to_ms() {
+        let cfg: McpServerConfig = toml::from_str(
+            r#"
+            command = "echo"
+            tool_timeout_sec = 1.25
+        "#,
+        )
+        .expect("should deserialize tool_timeout_sec");
+
+        assert_eq!(cfg.tool_timeout_ms(), Some(1250));
     }
 }

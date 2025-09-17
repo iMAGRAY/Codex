@@ -1,6 +1,8 @@
 pub mod debug_sandbox;
 mod exit_status;
 pub mod login;
+pub mod mcp;
+pub mod proto;
 
 use clap::Parser;
 use codex_common::CliConfigOverrides;

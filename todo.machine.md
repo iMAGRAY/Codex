@@ -91,6 +91,12 @@ Each task below lists **Inputs → Action → Outputs → Gate**; mark completio
 - **P2-CLI-03** Reconcile execution paths for `serve` subcommand to ensure new transport options align with config types; respect EXACTLY-ONCE gating via claim/outbox for spawn operations.
 - **P2-CLI-04** Harmonize error handling and logging with upstream style (colorized output, exit codes). Add integration tests or update snapshots Phase 3.
 
+### Block TUI — `codex-rs/tui/src/*` (Status: QA HOLD)
+- **P2-TUI-01** Resolve conflicts for `app.rs`, `app_event.rs`, `bottom_pane/mod.rs`, `chatwidget.rs`, `lib.rs`, integrating manager/wizard events. _Status: ✅ merged, awaiting extended tests_.
+- **P2-TUI-02** Wire transport-aware types in `tui/src/mcp/{types.rs,manager_view.rs,wizard_view.rs}`; ensure Draft ↔ Config parity. _Status: ✅ complete._
+- **P2-TUI-03** Generate/update snapshots under `tui/src/mcp/snapshots/` after UI changes. _Status: ✅ accepted via `cargo insta accept -p codex-tui`._
+- **P2-TUI-04** Open follow-up for property/race tests (moved to Phase 3 tasks P3-03). _Status: 🔴 pending — see WS4 checklist._
+
 ### Block DOC — `docs/config.md`
 - **P2-DOC-01** Merge tables describing MCP server configuration, ensuring new columns for metadata/auth/health/templates. Keep alphabetical order and anchors.
 - **P2-DOC-02** Insert migration instructions referencing CLI `mcp migrate`, including backup reminders and CLAIM-first explanation. Gate: markdown lint (`just lint-docs`).

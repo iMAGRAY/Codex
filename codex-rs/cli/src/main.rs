@@ -58,6 +58,7 @@ struct MultitoolCli {
     subcommand: Option<Subcommand>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
     /// Run Codex non-interactively.
@@ -359,7 +360,7 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         Some(Subcommand::Mcp(mut mcp_cli)) => {
             // Propagate any root-level config overrides (e.g. `-c key=value`).
             prepend_config_flags(&mut mcp_cli.config_overrides, root_config_overrides.clone());
-            mcp_cli.run().await?;
+            mcp_cli.run(codex_linux_sandbox_exe).await?;
         }
         Some(Subcommand::AppServer) => {
             codex_app_server::run_main(codex_linux_sandbox_exe, root_config_overrides).await?;

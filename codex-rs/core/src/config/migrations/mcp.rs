@@ -1,14 +1,16 @@
 use std::fs;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
 use tempfile::NamedTempFile;
-use toml::Value as TomlValue;
 use toml_edit::DocumentMut;
+use toml_edit::Item as TomlItem;
+use toml_edit::Table as TomlTable;
 
 use super::super::CONFIG_TOML_FILE;
-use super::super::load_config_as_toml;
 
 /// Number of historical config backups retained during migration.
 pub const BACKUP_RETENTION: usize = 3;
@@ -18,6 +20,85 @@ pub const BACKUP_RETENTION: usize = 3;
 pub struct MigrationOptions {
     pub dry_run: bool,
     pub force: bool,
+}
+
+fn normalize_timeout_fields(
+    server_name: &str,
+    table: &mut TomlTable,
+) -> std::io::Result<Vec<String>> {
+    let mut notes = Vec::new();
+
+    if table.contains_key("startup_timeout_ms") {
+        let item = table.remove("startup_timeout_ms").unwrap_or(TomlItem::None);
+        if table.get("startup_timeout_sec").is_none() {
+            let secs = convert_ms_item(&item, server_name, "startup_timeout_ms")?;
+            table["startup_timeout_sec"] = toml_edit::value(secs);
+        }
+        notes.push(format!("normalized startup_timeout_ms for '{server_name}'"));
+    }
+
+    if table.contains_key("tool_timeout_ms") {
+        let item = table.remove("tool_timeout_ms").unwrap_or(TomlItem::None);
+        if table.get("tool_timeout_sec").is_none() {
+            let secs = convert_ms_item(&item, server_name, "tool_timeout_ms")?;
+            table["tool_timeout_sec"] = toml_edit::value(secs);
+        }
+        notes.push(format!("normalized tool_timeout_ms for '{server_name}'"));
+    }
+
+    Ok(notes)
+}
+
+fn convert_ms_item(item: &TomlItem, server_name: &str, field_name: &str) -> std::io::Result<f64> {
+    let Some(value) = item.as_value() else {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("{field_name} for server '{server_name}' must be a numeric literal"),
+        ));
+    };
+
+    if let Some(ms) = value.as_integer() {
+        if ms < 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("{field_name} for server '{server_name}' must be non-negative"),
+            ));
+        }
+        return Ok((ms as f64) / 1000.0);
+    }
+
+    if let Some(ms) = value.as_float() {
+        if ms < 0.0 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("{field_name} for server '{server_name}' must be non-negative"),
+            ));
+        }
+        return Ok(ms / 1000.0);
+    }
+
+    if let Some(ms_str) = value.as_str() {
+        let ms: f64 = ms_str.parse().map_err(|_| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("{field_name} for server '{server_name}' must be numeric, got '{ms_str}'"),
+            )
+        })?;
+        if ms < 0.0 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("{field_name} for server '{server_name}' must be non-negative"),
+            ));
+        }
+        return Ok(ms / 1000.0);
+    }
+
+    Err(Error::new(
+        ErrorKind::InvalidData,
+        format!(
+            "{field_name} for server '{server_name}' must be an integer, float, or numeric string"
+        ),
+    ))
 }
 
 impl Default for MigrationOptions {
@@ -52,21 +133,11 @@ impl MigrationReport {
 }
 
 /// Result of creating/rotating configuration backups.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct BackupOutcome {
     pub created: bool,
     pub rotated: bool,
     pub backup_path: Option<PathBuf>,
-}
-
-impl Default for BackupOutcome {
-    fn default() -> Self {
-        Self {
-            created: false,
-            rotated: false,
-            backup_path: None,
-        }
-    }
 }
 
 /// Performs a best-effort migration of MCP-related configuration to schema version 2.
@@ -89,46 +160,91 @@ pub fn migrate_to_v2(
         ));
     }
 
-    let root_value = load_config_as_toml(codex_home)?;
-    let current_version = root_value
+    let mut doc = load_config_as_document(&config_path)?;
+    let current_version = doc
         .get("mcp_schema_version")
-        .and_then(TomlValue::as_integer)
+        .and_then(|item| item.as_value())
+        .and_then(|value| value.as_integer())
         .map(|v| v.max(0) as u32)
         .unwrap_or(1);
 
-    if current_version >= 2 && !options.force {
+    let mut notes = Vec::new();
+    let mut servers_changed = false;
+
+    if let Some(servers_table) = doc
+        .get_mut("mcp_servers")
+        .and_then(|item| item.as_table_mut())
+    {
+        let server_keys: Vec<String> = servers_table.iter().map(|(k, _)| k.to_string()).collect();
+        for server_name in server_keys {
+            let Some(item) = servers_table.get_mut(&server_name) else {
+                continue;
+            };
+            let Some(table) = item.as_table_mut() else {
+                continue;
+            };
+            let mut server_notes = normalize_timeout_fields(&server_name, table)?;
+            if !server_notes.is_empty() {
+                servers_changed = true;
+                if options.dry_run {
+                    for note in &mut server_notes {
+                        *note = format!("would {note}");
+                    }
+                }
+                notes.extend(server_notes);
+            }
+        }
+    }
+
+    let needs_version_bump = current_version < 2 || options.force;
+    if needs_version_bump {
+        let msg = if options.dry_run {
+            if current_version < 2 {
+                format!("would set mcp_schema_version from {} to 2", current_version)
+            } else {
+                "would reassert mcp_schema_version = 2".to_string()
+            }
+        } else if current_version < 2 {
+            format!("mcp_schema_version updated from {} to 2", current_version)
+        } else {
+            "mcp_schema_version reasserted to 2".to_string()
+        };
+        notes.push(msg);
+    }
+
+    let changes_detected = servers_changed || needs_version_bump;
+
+    if !changes_detected {
         return Ok(MigrationReport::unchanged(
             current_version,
-            "mcp_schema_version already at or above 2",
+            "schema already at v2 and no timeout normalization required",
         ));
     }
 
     if options.dry_run {
         return Ok(MigrationReport {
             backed_up: false,
-            changes_detected: current_version < 2 || options.force,
+            changes_detected,
             from_version: current_version,
             to_version: 2,
-            notes: vec!["dry-run: no changes applied".into()],
+            notes,
         });
     }
 
     let backup = create_backup_with_rotation(codex_home)?;
-    let mut doc = load_config_as_document(&config_path)?;
 
-    doc["mcp_schema_version"] = toml_edit::value(2);
+    if needs_version_bump {
+        doc["mcp_schema_version"] = toml_edit::value(2);
+    }
 
     write_document_atomic(codex_home, &config_path, doc)?;
 
     Ok(MigrationReport {
         backed_up: backup.created,
-        changes_detected: true,
+        changes_detected,
         from_version: current_version,
         to_version: 2,
-        notes: vec![format!(
-            "mcp_schema_version updated from {} to 2",
-            current_version
-        )],
+        notes,
     })
 }
 
@@ -170,7 +286,7 @@ pub fn create_backup_with_rotation(codex_home: &Path) -> std::io::Result<BackupO
 }
 
 fn backup_path(codex_home: &Path, index: usize) -> PathBuf {
-    codex_home.join(format!("config.toml.bak{}", index))
+    codex_home.join(format!("config.toml.bak{index}"))
 }
 
 fn load_config_as_document(path: &Path) -> std::io::Result<DocumentMut> {
@@ -239,7 +355,12 @@ mod tests {
 
         let report = migrate_to_v2(codex_home, &MigrationOptions::default())?;
         assert!(report.changes_detected);
-        assert!(report.notes.iter().any(|n| n.contains("dry-run")));
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|n| n.contains("would set mcp_schema_version"))
+        );
         assert_eq!(report.from_version, 1);
         assert_eq!(report.to_version, 2);
 
@@ -269,12 +390,54 @@ mod tests {
         assert_eq!(report.to_version, 2);
         assert!(backup_path(codex_home, 1).exists());
 
-        let parsed = load_config_as_toml(codex_home)?;
+        let contents = fs::read_to_string(&config_path)?;
+        assert!(contents.contains("mcp_schema_version = 2"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn migrate_normalizes_timeout_ms_and_is_idempotent() -> std::io::Result<()> {
+        let tmp = TempDir::new()?;
+        let codex_home = tmp.path();
+        let config_path = codex_home.join(CONFIG_TOML_FILE);
+        fs::create_dir_all(codex_home)?;
+        fs::write(
+            &config_path,
+            r#"
+[mcp_servers.docs]
+command = "echo"
+startup_timeout_ms = 2500
+tool_timeout_ms = 6000
+"#,
+        )?;
+
+        let options = MigrationOptions {
+            dry_run: false,
+            force: false,
+        };
+        let report = migrate_to_v2(codex_home, &options)?;
+        assert!(report.changes_detected);
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|n| n.contains("startup_timeout_ms"))
+        );
+        assert!(report.notes.iter().any(|n| n.contains("tool_timeout_ms")));
+
+        let contents = fs::read_to_string(&config_path)?;
+        assert!(contents.contains("startup_timeout_sec = 2.5"));
+        assert!(contents.contains("tool_timeout_sec = 6"));
+        assert!(!contents.contains("startup_timeout_ms"));
+        assert!(!contents.contains("tool_timeout_ms"));
+        assert!(contents.contains("mcp_schema_version = 2"));
+
+        let second = migrate_to_v2(codex_home, &options)?;
+        assert!(!second.changes_detected);
         assert_eq!(
-            parsed
-                .get("mcp_schema_version")
-                .and_then(TomlValue::as_integer),
-            Some(2)
+            second.notes,
+            vec!["schema already at v2 and no timeout normalization required".to_string()]
         );
 
         Ok(())

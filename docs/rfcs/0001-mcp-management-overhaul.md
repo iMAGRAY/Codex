@@ -1,7 +1,7 @@
 # RFC 0001: MCP Management Overhaul
 
 **Status**: Draft  
-**Author**: Codex Agent  
+**Author**: iMAGRAY  
 **Created**: 2025-09-17  
 **Updated**: 2025-09-17  
 **Reviewers**: Core, Security, UX, TUI  
@@ -279,6 +279,14 @@ Risks & Mitigations:
 | Health probe overload | CPU spikes | Concurrency cap, jitter, manual disable per server |
 | Signature key compromised | Template supply-chain | Trust-anchor rotation procedure + revocation list |
 | Telemetry misconfiguration | Privacy incident | Opt-in default off, documented payload, internal access controls |
+
+### 10.1 Exactly-Once & Idempotency Guarantees
+
+- **Strategy**: Adopt a `CLAIM|OUTBOX` pipeline. Mutating registry calls claim rows via `UPDATE ... WHERE state = 'pending' AND idempotency_key IS NULL RETURNING *`; only the transaction that successfully claims may emit events or persist changes.
+- **Idempotency keys**: Require callers (CLI, TUI, automation) to supply `idempotency_key`; enforce with partial unique index `(server_id, idempotency_key) WHERE idempotency_key IS NOT NULL`. Conflicts surface the existing record (`ReturnExisting`) by default, with opt-in `--conflict=409` path when automation prefers hard failures.
+- **Outbox**: Side-effects append to transactional outbox rows before commit. The outbox worker guarantees exactly-once dispatch, resumes after crash, and reaps stuck entries after 60 s.
+- **Locks**: No cross-effect mutexes; claim-returning semantics avoid deadlocks while satisfying `NoLock_AcrossEffect` constraint.
+- **Rollback**: Failed transactions roll back the claim, encouraging retriable behavior and preventing partial state.
 
 ## 11. Testing Strategy
 

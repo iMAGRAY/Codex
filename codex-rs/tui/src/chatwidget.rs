@@ -4,10 +4,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use codex_core::config::Config;
+use codex_core::config_types::McpServerConfig;
 use codex_core::config_types::Notifications;
 use codex_core::git_info::current_branch_name;
 use codex_core::git_info::local_git_branches;
-use codex_core::project_doc::DEFAULT_PROJECT_DOC_FILENAME;
+use codex_core::mcp::templates::TemplateCatalog;
 use codex_core::protocol::AgentMessageDeltaEvent;
 use codex_core::protocol::AgentMessageEvent;
 use codex_core::protocol::AgentReasoningDeltaEvent;
@@ -54,8 +55,6 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Constraint;
 use ratatui::layout::Layout;
 use ratatui::layout::Rect;
-use ratatui::style::Stylize;
-use ratatui::text::Line;
 use ratatui::widgets::Widget;
 use ratatui::widgets::WidgetRef;
 use tokio::sync::mpsc::UnboundedSender;
@@ -84,7 +83,12 @@ use crate::history_cell::AgentMessageCell;
 use crate::history_cell::HistoryCell;
 use crate::history_cell::McpToolCallCell;
 use crate::markdown::append_markdown;
-use crate::render::renderable::ColumnRenderable;
+use crate::mcp::McpManagerEntry;
+use crate::mcp::McpManagerInit;
+use crate::mcp::McpManagerView;
+use crate::mcp::McpWizardDraft;
+use crate::mcp::McpWizardInit;
+use crate::mcp::McpWizardView;
 use crate::slash_command::SlashCommand;
 use crate::status::RateLimitSnapshotDisplay;
 use crate::text_formatting::truncate_text;
@@ -1131,14 +1135,6 @@ impl ChatWidget {
                 self.app_event_tx.send(AppEvent::NewSession);
             }
             SlashCommand::Init => {
-                let init_target = self.config.cwd.join(DEFAULT_PROJECT_DOC_FILENAME);
-                if init_target.exists() {
-                    let message = format!(
-                        "{DEFAULT_PROJECT_DOC_FILENAME} already exists here. Skipping /init to avoid overwriting it."
-                    );
-                    self.add_info_message(message, None);
-                    return;
-                }
                 const INIT_PROMPT: &str = include_str!("../prompt_for_init_command.md");
                 self.submit_text_message(INIT_PROMPT.to_string());
             }
@@ -1730,6 +1726,7 @@ impl ChatWidget {
         } else {
             default_choice
         };
+
         let mut items: Vec<SelectionItem> = Vec::new();
         for choice in choices.iter() {
             let effort = choice.display;
@@ -1751,14 +1748,6 @@ impl ChatWidget {
                         .find(|preset| preset.effort == choice.stored)
                         .map(|preset| preset.description.to_string())
                 });
-
-            let warning = "⚠ High reasoning effort can quickly consume Plus plan rate limits.";
-            let show_warning = model_slug == "gpt-5-codex" && effort == ReasoningEffortConfig::High;
-            let selected_description = show_warning.then(|| {
-                description
-                    .as_ref()
-                    .map_or(warning.to_string(), |d| format!("{d}\n{warning}"))
-            });
 
             let model_for_action = model_slug.clone();
             let effort_for_action = choice.stored;
@@ -1789,7 +1778,6 @@ impl ChatWidget {
             items.push(SelectionItem {
                 name: effort_label,
                 description,
-                selected_description,
                 is_current: is_current_model && choice.stored == highlight_choice,
                 actions,
                 dismiss_on_select: true,
@@ -1797,13 +1785,9 @@ impl ChatWidget {
             });
         }
 
-        let mut header = ColumnRenderable::new();
-        header.push(Line::from(
-            format!("Select Reasoning Level for {model_slug}").bold(),
-        ));
-
         self.bottom_pane.show_selection_view(SelectionViewParams {
-            header: Box::new(header),
+            title: Some("Select Reasoning Level".to_string()),
+            subtitle: Some(format!("Reasoning for model {model_slug}")),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             ..Default::default()
@@ -1885,6 +1869,52 @@ impl ChatWidget {
     }
 
     pub(crate) fn add_mcp_output(&mut self) {
+        if self.config.experimental_mcp_overhaul {
+            self.app_event_tx.send(AppEvent::OpenMcpManager);
+            return;
+        }
+
+        self.show_mcp_history_summary();
+    }
+
+    pub(crate) fn show_mcp_manager(
+        &mut self,
+        entries: Vec<McpManagerEntry>,
+        template_count: usize,
+    ) {
+        let init = McpManagerInit {
+            app_event_tx: self.app_event_tx.clone(),
+            entries,
+            template_count,
+        };
+        self.bottom_pane
+            .show_custom_view(Box::new(McpManagerView::new(init)));
+    }
+
+    pub(crate) fn show_mcp_wizard(
+        &mut self,
+        catalog: TemplateCatalog,
+        draft: Option<McpWizardDraft>,
+        existing_name: Option<String>,
+    ) {
+        let init = McpWizardInit {
+            app_event_tx: self.app_event_tx.clone(),
+            catalog,
+            draft,
+            existing_name,
+        };
+        self.bottom_pane
+            .show_custom_view(Box::new(McpWizardView::new(init)));
+    }
+
+    pub(crate) fn set_mcp_servers(
+        &mut self,
+        servers: std::collections::BTreeMap<String, McpServerConfig>,
+    ) {
+        self.config.mcp_servers = servers.into_iter().collect();
+    }
+
+    pub(crate) fn show_mcp_history_summary(&mut self) {
         if self.config.mcp_servers.is_empty() {
             self.add_to_history(history_cell::empty_mcp_output());
         } else {

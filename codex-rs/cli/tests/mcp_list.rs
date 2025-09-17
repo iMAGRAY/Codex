@@ -5,7 +5,6 @@ use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use serde_json::Value as JsonValue;
-use serde_json::json;
 use tempfile::TempDir;
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
@@ -64,29 +63,118 @@ fn list_and_get_render_expected_output() -> Result<()> {
     assert!(json_output.status.success());
     let stdout = String::from_utf8(json_output.stdout)?;
     let parsed: JsonValue = serde_json::from_str(&stdout)?;
+    let servers = parsed.as_array().expect("list response must be an array");
+    assert_eq!(servers.len(), 1, "expected a single server entry");
+    let server = servers[0]
+        .as_object()
+        .expect("server entry should be an object");
+
+    let get_str = |key: &str| {
+        server
+            .get(key)
+            .and_then(JsonValue::as_str)
+            .unwrap_or_else(|| panic!("missing {key}"))
+    };
+    let get_null = |key: &str| {
+        server
+            .get(key)
+            .unwrap_or_else(|| panic!("missing {key}"))
+            .is_null()
+    };
+
+    assert_eq!(get_str("name"), "docs");
+    assert!(get_null("display_name"));
+    assert!(get_null("category"));
+    assert!(get_null("template_id"));
+    assert!(get_null("description"));
+    assert_eq!(get_str("command"), "docs-server");
+    let args = server
+        .get("args")
+        .and_then(JsonValue::as_array)
+        .expect("args should be an array");
+    let args_strings: Vec<_> = args
+        .iter()
+        .map(|v| v.as_str().expect("args entries should be strings"))
+        .collect();
+    assert_eq!(args_strings, ["--port", "4000"]);
+    let env = server
+        .get("env")
+        .and_then(JsonValue::as_object)
+        .expect("env should be an object");
     assert_eq!(
-        parsed,
-        json!([
-          {
-            "name": "docs",
-            "enabled": true,
-            "transport": {
-              "type": "stdio",
-              "command": "docs-server",
-              "args": [
-                "--port",
-                "4000"
-              ],
-              "env": {
-                "TOKEN": "secret"
-              }
-            },
-            "startup_timeout_sec": null,
-            "tool_timeout_sec": null,
-            "auth_status": "unsupported"
-          }
-        ]
-        )
+        env.get("TOKEN")
+            .and_then(JsonValue::as_str)
+            .expect("TOKEN entry should exist"),
+        "secret"
+    );
+    assert!(get_null("url"));
+    assert!(get_null("bearer_token_env_var"));
+    let tags = server
+        .get("tags")
+        .and_then(JsonValue::as_array)
+        .expect("tags should be an array");
+    assert!(tags.is_empty());
+    assert!(get_null("created_at"));
+    assert!(get_null("last_verified_at"));
+    assert!(get_null("metadata"));
+    assert!(get_null("auth"));
+    assert!(get_null("healthcheck"));
+    assert_eq!(
+        server
+            .get("enabled")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false),
+        true
+    );
+    let transport = server
+        .get("transport")
+        .and_then(JsonValue::as_object)
+        .expect("transport should be an object");
+    assert_eq!(
+        transport
+            .get("type")
+            .and_then(JsonValue::as_str)
+            .expect("transport.type should exist"),
+        "stdio"
+    );
+    assert_eq!(
+        transport
+            .get("command")
+            .and_then(JsonValue::as_str)
+            .expect("transport.command should exist"),
+        "docs-server"
+    );
+    let transport_args = transport
+        .get("args")
+        .and_then(JsonValue::as_array)
+        .expect("transport.args should be an array");
+    let transport_args_strings: Vec<_> = transport_args
+        .iter()
+        .map(|v| {
+            v.as_str()
+                .expect("transport args entries should be strings")
+        })
+        .collect();
+    assert_eq!(transport_args_strings, ["--port", "4000"]);
+    let transport_env = transport
+        .get("env")
+        .and_then(JsonValue::as_object)
+        .expect("transport.env should be an object");
+    assert_eq!(
+        transport_env
+            .get("TOKEN")
+            .and_then(JsonValue::as_str)
+            .expect("transport env TOKEN"),
+        "secret"
+    );
+    assert!(get_null("startup_timeout_sec"));
+    assert!(get_null("tool_timeout_sec"));
+    assert_eq!(
+        server
+            .get("auth_status")
+            .and_then(JsonValue::as_str)
+            .expect("auth_status should exist"),
+        "unsupported"
     );
 
     let mut get_cmd = codex_command(codex_home.path())?;

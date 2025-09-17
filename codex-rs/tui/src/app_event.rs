@@ -7,6 +7,7 @@ use codex_file_search::FileMatch;
 
 use crate::bottom_pane::ApprovalRequest;
 use crate::history_cell::HistoryCell;
+use crate::mcp::McpWizardDraft;
 
 use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
@@ -87,4 +88,28 @@ pub(crate) enum AppEvent {
 
     /// Open the approval popup.
     FullScreenApprovalRequest(ApprovalRequest),
+
+    /// Open MCP manager panel when experimental overhaul is enabled.
+    OpenMcpManager,
+
+    /// Open the MCP wizard with optional template hint and pre-filled draft.
+    OpenMcpWizard {
+        template_id: Option<String>,
+        draft: Option<McpWizardDraft>,
+        existing_name: Option<String>,
+    },
+
+    /// Apply wizard changes (persist configuration, refresh views).
+    ApplyMcpWizard {
+        draft: McpWizardDraft,
+        existing_name: Option<String>,
+    },
+
+    /// Reload MCP servers from disk and refresh the manager view.
+    ReloadMcpServers,
+
+    /// Remove a configured MCP server.
+    RemoveMcpServer {
+        name: String,
+    },
 }
