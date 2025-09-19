@@ -11,7 +11,10 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::cli::{CliConfig, SummaryMode};
-use crate::{ApplyPatchAction, ApplyPatchError, ApplyPatchFileChange, Hunk, MaybeApplyPatchVerified, Selection, SelectionEntry, UpdateFileChunk};
+use crate::{
+    ApplyPatchAction, ApplyPatchError, ApplyPatchFileChange, Hunk, MaybeApplyPatchVerified,
+    Selection, SelectionEntry, UpdateFileChunk,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InteractiveCapability {
@@ -84,7 +87,10 @@ pub fn run_interactive(request: &InteractiveRequest) -> Result<Selection, Intera
                 });
             }
             ApplyPatchFileChange::Delete { content } => {
-                print_block("File will be deleted", format_removed_added_block(content.lines(), '-'))?;
+                print_block(
+                    "File will be deleted",
+                    format_removed_added_block(content.lines(), '-'),
+                )?;
                 let apply = prompt_yes_no("Delete this file?", true)?;
                 decisions.push(if apply {
                     HunkDecision::Apply
@@ -92,10 +98,7 @@ pub fn run_interactive(request: &InteractiveRequest) -> Result<Selection, Intera
                     HunkDecision::Skip
                 });
             }
-            ApplyPatchFileChange::Update {
-                move_path,
-                ..
-            } => {
+            ApplyPatchFileChange::Update { move_path, .. } => {
                 if let Some(dest) = move_path {
                     let move_display = display_path(dest, &request.plan.cwd);
                     println!("rename → {move_display}");

@@ -13,12 +13,12 @@ use std::str::Utf8Error;
 use anyhow::Context;
 use anyhow::Result;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 pub use parser::Hunk;
 pub use parser::ParseError;
 use parser::ParseError::*;
 pub use parser::UpdateFileChunk;
 pub use parser::parse_patch;
+use serde::{Deserialize, Serialize};
 use similar::TextDiff;
 use thiserror::Error;
 use tree_sitter::LanguageError;
@@ -145,7 +145,6 @@ pub enum ApplyPatchFileChange {
     },
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Selection {
     ApplyAll,
@@ -155,8 +154,13 @@ pub enum Selection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SelectionEntry {
-    EntireHunk { hunk_index: usize },
-    UpdateChunk { hunk_index: usize, chunk_index: usize },
+    EntireHunk {
+        hunk_index: usize,
+    },
+    UpdateChunk {
+        hunk_index: usize,
+        chunk_index: usize,
+    },
 }
 
 impl SelectionEntry {
@@ -189,7 +193,12 @@ pub fn filter_hunks_by_selection(hunks: &[Hunk], selection: &Selection) -> Vec<H
                         continue;
                     }
 
-                    if let Hunk::UpdateFile { path, move_path, chunks } = hunk {
+                    if let Hunk::UpdateFile {
+                        path,
+                        move_path,
+                        chunks,
+                    } = hunk
+                    {
                         let mut chunk_indices = BTreeSet::new();
                         for entry in decisions {
                             if let SelectionEntry::UpdateChunk { chunk_index, .. } = entry {
@@ -241,7 +250,11 @@ pub fn render_patch_from_hunks(hunks: &[Hunk]) -> String {
                 patch.push_str(&path.to_string_lossy());
                 patch.push('\n');
             }
-            Hunk::UpdateFile { path, move_path, chunks } => {
+            Hunk::UpdateFile {
+                path,
+                move_path,
+                chunks,
+            } => {
                 patch.push_str("*** Update File: ");
                 patch.push_str(&path.to_string_lossy());
                 patch.push('\n');
@@ -285,10 +298,9 @@ pub fn action_from_hunks(hunks: &[Hunk], cwd: &Path) -> Result<ApplyPatchAction,
     match maybe_parse_apply_patch_verified(&argv, cwd) {
         MaybeApplyPatchVerified::Body(action) => Ok(action),
         MaybeApplyPatchVerified::CorrectnessError(err) => Err(err),
-        MaybeApplyPatchVerified::ShellParseError(err) => Err(ApplyPatchError::ComputeReplacements(format!(
-            "Failed to compute patch action: {:?}",
-            err
-        ))),
+        MaybeApplyPatchVerified::ShellParseError(err) => Err(ApplyPatchError::ComputeReplacements(
+            format!("Failed to compute patch action: {:?}", err),
+        )),
         MaybeApplyPatchVerified::NotApplyPatch => Err(ApplyPatchError::ComputeReplacements(
             "Rendered patch was not recognized as apply_patch".to_string(),
         )),
@@ -383,7 +395,12 @@ impl ApplyPatchAction {
             filename = filename,
             content = content
         );
-        let changes = HashMap::from([(path.to_path_buf(), ApplyPatchFileChange::Add { content: content.clone() })]);
+        let changes = HashMap::from([(
+            path.to_path_buf(),
+            ApplyPatchFileChange::Add {
+                content: content.clone(),
+            },
+        )]);
         Self {
             changes,
             hunks: vec![Hunk::AddFile {
@@ -445,7 +462,12 @@ pub fn maybe_parse_apply_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
                 let path = hunk.resolve_path(&effective_cwd);
                 match hunk {
                     Hunk::AddFile { contents, .. } => {
-                        changes.insert(path, ApplyPatchFileChange::Add { content: contents.clone() });
+                        changes.insert(
+                            path,
+                            ApplyPatchFileChange::Add {
+                                content: contents.clone(),
+                            },
+                        );
                     }
                     Hunk::DeleteFile { .. } => {
                         let content = match std::fs::read_to_string(&path) {

@@ -2,11 +2,17 @@ use std::io::{self, IsTerminal as _, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
-use crate::cli::{self, CliConfig, CliError, CliInvocation, Command as CliCommand, InteractiveMode, PreviewMode, SummaryMode};
+use crate::Selection::{ApplyAll, Explicit, SkipAll};
+use crate::cli::{
+    self, CliConfig, CliError, CliInvocation, Command as CliCommand, InteractiveMode, PreviewMode,
+    SummaryMode,
+};
 use crate::history::{self, UndoError, UndoRecord};
 use crate::interactive::{self, InteractiveCapability, InteractiveError, InteractiveRequest};
-use crate::{apply_patch, build_selected_patch, maybe_parse_apply_patch_verified, ApplyPatchAction, ApplyPatchError, MaybeApplyPatchVerified, Selection};
-use crate::Selection::{ApplyAll, Explicit, SkipAll};
+use crate::{
+    ApplyPatchAction, ApplyPatchError, MaybeApplyPatchVerified, apply_patch,
+    build_selected_patch, maybe_parse_apply_patch_verified,
+};
 
 pub fn main() -> ! {
     let exit_code = run_main();
@@ -181,7 +187,10 @@ fn run_undo(config: &CliConfig) -> Result<(), WorkflowError> {
     Ok(())
 }
 
-fn apply_selected_patch(action: &ApplyPatchAction, summary_mode: SummaryMode) -> Result<(), WorkflowError> {
+fn apply_selected_patch(
+    action: &ApplyPatchAction,
+    summary_mode: SummaryMode,
+) -> Result<(), WorkflowError> {
     let mut stdout_buf = Vec::new();
     let mut stderr_buf = Vec::new();
     match apply_patch(&action.patch, &mut stdout_buf, &mut stderr_buf) {
@@ -208,11 +217,15 @@ fn parse_action(patch: &str, cwd: &Path) -> Result<ApplyPatchAction, WorkflowErr
     let argv = vec!["apply_patch".to_string(), patch.to_string()];
     match maybe_parse_apply_patch_verified(&argv, cwd) {
         MaybeApplyPatchVerified::Body(action) => Ok(action),
-        MaybeApplyPatchVerified::CorrectnessError(err) => Err(WorkflowError::PatchParse(err.to_string())),
-        MaybeApplyPatchVerified::ShellParseError(err) => Err(WorkflowError::PatchParse(err.to_string())),
-        MaybeApplyPatchVerified::NotApplyPatch => {
-            Err(WorkflowError::PatchParse("Provided input is not a valid apply_patch payload.".to_string()))
+        MaybeApplyPatchVerified::CorrectnessError(err) => {
+            Err(WorkflowError::PatchParse(err.to_string()))
         }
+        MaybeApplyPatchVerified::ShellParseError(err) => {
+            Err(WorkflowError::PatchParse(err.to_string()))
+        }
+        MaybeApplyPatchVerified::NotApplyPatch => Err(WorkflowError::PatchParse(
+            "Provided input is not a valid apply_patch payload.".to_string(),
+        )),
     }
 }
 
@@ -222,7 +235,10 @@ fn determine_interactive(config: &CliConfig) -> bool {
         InteractiveMode::Disabled => false,
         InteractiveMode::Auto => {
             let stdout_tty = std::io::stdout().is_terminal();
-            matches!(interactive::auto_detect_interactive(stdout_tty, config), InteractiveCapability::Enabled)
+            matches!(
+                interactive::auto_detect_interactive(stdout_tty, config),
+                InteractiveCapability::Enabled
+            )
         }
     }
 }
@@ -234,7 +250,9 @@ fn prompt_yes_no(prompt: &str, default_yes: bool) -> Result<bool, WorkflowError>
         write!(stdout, "{prompt} {default_hint} ").map_err(WorkflowError::from)?;
         stdout.flush().map_err(WorkflowError::from)?;
         let mut input = String::new();
-        std::io::stdin().read_line(&mut input).map_err(WorkflowError::from)?;
+        std::io::stdin()
+            .read_line(&mut input)
+            .map_err(WorkflowError::from)?;
         let trimmed = input.trim().to_lowercase();
         if trimmed.is_empty() {
             return Ok(default_yes);
@@ -256,10 +274,12 @@ fn print_preview(action: &ApplyPatchAction, config: &CliConfig) -> Result<(), Wo
     for (index, hunk) in action.hunks.iter().enumerate() {
         let abs_path = hunk.resolve_path(&action.cwd);
         let display_path = display_path(&abs_path, &action.cwd);
-        let change = action
-            .changes()
-            .get(&abs_path)
-            .ok_or_else(|| WorkflowError::Message(format!("Missing change metadata for {}", abs_path.display())))?;
+        let change = action.changes().get(&abs_path).ok_or_else(|| {
+            WorkflowError::Message(format!(
+                "Missing change metadata for {}",
+                abs_path.display()
+            ))
+        })?;
         println!("  [{}] {}", index, display_path);
         match change {
             crate::ApplyPatchFileChange::Add { content } => {
@@ -328,16 +348,30 @@ fn summarize_undo(record: &UndoRecord) -> Summary {
     for entry in &record.entries {
         match entry {
             history::UndoEntry::Added { path, .. } => {
-                summary.deleted.push(display_path(path, path.parent().unwrap_or(Path::new(""))));
+                summary
+                    .deleted
+                    .push(display_path(path, path.parent().unwrap_or(Path::new(""))));
             }
             history::UndoEntry::Deleted { path, .. } => {
-                summary.added.push(display_path(path, path.parent().unwrap_or(Path::new(""))));
+                summary
+                    .added
+                    .push(display_path(path, path.parent().unwrap_or(Path::new(""))));
             }
-            history::UndoEntry::Updated { original_path, moved_path, .. } => {
-                let mut label = display_path(original_path, original_path.parent().unwrap_or(Path::new("")));
+            history::UndoEntry::Updated {
+                original_path,
+                moved_path,
+                ..
+            } => {
+                let mut label = display_path(
+                    original_path,
+                    original_path.parent().unwrap_or(Path::new("")),
+                );
                 if let Some(moved) = moved_path {
                     label.push_str(" <- ");
-                    label.push_str(&display_path(moved, moved.parent().unwrap_or(Path::new(""))));
+                    label.push_str(&display_path(
+                        moved,
+                        moved.parent().unwrap_or(Path::new("")),
+                    ));
                 }
                 summary.modified.push(label);
             }
@@ -346,7 +380,11 @@ fn summarize_undo(record: &UndoRecord) -> Summary {
     summary
 }
 
-fn print_summary(summary: &Summary, mode: &SummaryMode, dry_run: bool) -> Result<(), WorkflowError> {
+fn print_summary(
+    summary: &Summary,
+    mode: &SummaryMode,
+    dry_run: bool,
+) -> Result<(), WorkflowError> {
     let mut stdout = std::io::stdout();
     match mode {
         SummaryMode::Quiet => {}
@@ -373,10 +411,16 @@ fn print_summary(summary: &Summary, mode: &SummaryMode, dry_run: bool) -> Result
                 writeln!(stdout, "Apply summary:").map_err(WorkflowError::from)?;
             }
             writeln!(stdout, "  Added: {}", summary.added.len()).map_err(WorkflowError::from)?;
-            writeln!(stdout, "  Modified: {}", summary.modified.len()).map_err(WorkflowError::from)?;
-            writeln!(stdout, "  Deleted: {}", summary.deleted.len()).map_err(WorkflowError::from)?;
-            writeln!(stdout, "  Lines +{} / -{}", summary.lines_added, summary.lines_removed)
+            writeln!(stdout, "  Modified: {}", summary.modified.len())
                 .map_err(WorkflowError::from)?;
+            writeln!(stdout, "  Deleted: {}", summary.deleted.len())
+                .map_err(WorkflowError::from)?;
+            writeln!(
+                stdout,
+                "  Lines +{} / -{}",
+                summary.lines_added, summary.lines_removed
+            )
+            .map_err(WorkflowError::from)?;
             if !summary.added.is_empty() {
                 writeln!(stdout, "  Added files:").map_err(WorkflowError::from)?;
                 for path in &summary.added {
@@ -456,8 +500,7 @@ fn run_post_commands(commands: &[String], cwd: &Path) -> Result<(), WorkflowErro
         if !status.success() {
             return Err(WorkflowError::Message(format!(
                 "Post-command `{}` failed with status {}",
-                command,
-                status
+                command, status
             )));
         }
     }

@@ -184,9 +184,9 @@ Ship a feature-flagged MCP wizard and dashboard that meet these success criteria
   title: Apply Patch Interactive UX Revamp
   type: feature
   status: blocked
-  blocked_reason: workspace `cargo fmt` fails on Windows because existing TUI files contain bare CR doc comments; apply_patch crate formats cleanly once formatting scope is limited.
+  blocked_reason: `cargo fmt` и `cargo test -p codex-apply-patch` завершаются сигналом (вероятно OOM/kill в sandbox). Форматирование отдельного пакета прошло, но тестовый прогон не запускается.
   blocked_recommendations:
-    - run `cargo fmt --package codex-apply-patch` (or fix CRs in `tui/src/bottom_pane/chat_composer.rs`) before full-workspace formatting
+    - увеличить лимиты sandbox либо запустить `cargo test -p codex-apply-patch` вне sandbox; затем повторить `cargo fmt`/`cargo test` в чистом окружении
   priority: P0
   size_points: 21
   scope_paths:
