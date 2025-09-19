@@ -33,6 +33,8 @@ build-linux: ensure-linux-target
 	@mkdir -p $(DIST_DIR)
 	@cp $(WORKSPACE_DIR)/target/$(LINUX_TARGET)/release/$(BIN_NAME) $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET)
 	@echo "[build-linux] output => $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET)"
+	@install -Dm755 $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET) $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)
+	@echo "[build-linux] refreshed $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)"
 
 build-windows: ensure-windows-target
 ifeq ($(strip $(MINGW_CC)),)
@@ -52,10 +54,7 @@ ensure-windows-target:
 	@cd $(WORKSPACE_DIR) && rustup target add $(WINDOWS_TARGET) >/dev/null 2>&1 || true
 
 install-linux: build-linux
-	@mkdir -p $(INSTALL_BIN_DIR)
-	@cp $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET) $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)
-	@chmod +x $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)
-	@echo "[install-linux] installed $(INSTALL_BIN_NAME) => $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)"
+	@echo "[install-linux] target path => $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)"
 	@if command -v $(INSTALL_BIN_NAME) >/dev/null 2>&1; \
 		then echo "[install-linux] $(INSTALL_BIN_NAME) is available in PATH"; \
 		else echo "[install-linux] add $(INSTALL_BIN_DIR) to PATH to use $(INSTALL_BIN_NAME)"; \
