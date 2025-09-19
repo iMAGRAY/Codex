@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
 use codex_cli::mcp::cli::WizardArgs;
+use codex_cli::mcp::signing::CommandSignatureEnvelope;
 use codex_cli::mcp::wizard::WizardOutcome;
 use codex_cli::mcp::wizard::build_non_interactive as build_wizard_non_interactive;
 use codex_cli::mcp::wizard::confirm_apply as wizard_confirm_apply;
@@ -21,9 +23,19 @@ use codex_core::config::migrations::mcp::MigrationOptions;
 use codex_core::config::migrations::mcp::{self};
 use codex_core::config::write_global_mcp_servers;
 use codex_core::config_types::McpServerConfig;
+use codex_core::mcp::intake::DetectorRegistry;
+use codex_core::mcp::intake::FingerprintStore;
+use codex_core::mcp::intake::IntakeEngine;
+use codex_core::mcp::intake::ReasonCatalog;
+use codex_core::mcp::intake::SharedFingerprintStore;
+use codex_core::mcp::intake::SignalCache;
+use codex_core::mcp::intake::SourceParser;
 use codex_core::mcp::registry::McpRegistry;
 use codex_core::mcp::registry::validate_server_name;
 use codex_core::mcp::templates::TemplateCatalog;
+use codex_core::security::ConsentEvent;
+use codex_core::security::record_consent;
+use std::time::Duration;
 
 /// [experimental] Launch Codex as an MCP server or manage configured MCP servers.
 ///
@@ -286,6 +298,31 @@ fn run_wizard(config_overrides: &CliConfigOverrides, args: WizardArgs) -> Result
     });
     let registry = McpRegistry::new(&config, templates.clone());
 
+    let parser = SourceParser::new(std::env::current_dir().ok());
+    let cache = SignalCache::default();
+    let reasons = ReasonCatalog::load_embedded().unwrap_or_else(|err| {
+        tracing::warn!("Failed to load reason codes: {err}");
+        ReasonCatalog::empty()
+    });
+    let fingerprint_store = find_codex_home()
+        .ok()
+        .map(|home| home.join("cache").join("mcp_intake_fingerprints.json"))
+        .and_then(|path| {
+            FingerprintStore::load(path.clone(), Duration::from_secs(24 * 60 * 60))
+                .map(SharedFingerprintStore::new)
+                .map_err(|err| {
+                    tracing::warn!(
+                        error = %err,
+                        path = %path.display(),
+                        "Failed to load intake fingerprint store"
+                    );
+                    err
+                })
+                .ok()
+        });
+    let detectors = Arc::new(DetectorRegistry::new());
+    let intake_engine = IntakeEngine::new(parser, cache, reasons, fingerprint_store, detectors);
+
     let has_non_interactive_inputs = args.name.is_some()
         || args.command.is_some()
         || !args.args.is_empty()
@@ -302,11 +339,12 @@ fn run_wizard(config_overrides: &CliConfigOverrides, args: WizardArgs) -> Result
         || args.health_timeout_ms.is_some()
         || args.health_interval_seconds.is_some()
         || args.health_endpoint.is_some()
-        || args.health_protocol.is_some();
+        || args.health_protocol.is_some()
+        || args.source.is_some();
 
     if args.json {
         if has_non_interactive_inputs {
-            let outcome = build_wizard_non_interactive(&registry, &args)?;
+            let outcome = build_wizard_non_interactive(&registry, &intake_engine, &args)?;
             println!("{}", wizard_render_json(&outcome)?);
         } else {
             let summary = serde_json::json!({
@@ -325,10 +363,12 @@ fn run_wizard(config_overrides: &CliConfigOverrides, args: WizardArgs) -> Result
     }
 
     let outcome = if has_non_interactive_inputs {
-        build_wizard_non_interactive(&registry, &args)?
+        build_wizard_non_interactive(&registry, &intake_engine, &args)?
     } else {
-        run_wizard_interactive(&registry, args.template.as_deref())?
+        run_wizard_interactive(&registry, &intake_engine, &args)?
     };
+
+    let signature_envelope = CommandSignatureEnvelope::from_args(&args)?;
 
     let mut applied = false;
     let mut summary_shown = false;
@@ -336,12 +376,26 @@ fn run_wizard(config_overrides: &CliConfigOverrides, args: WizardArgs) -> Result
     if args.apply {
         print_wizard_summary(&outcome);
         summary_shown = true;
+        let envelope = signature_envelope.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Secure Command Signing required: provide --signing-key, --signature, --signed-at, and --nonce (REQ-SEC-01, #74)"
+            )
+        })?;
+        envelope.verify(&outcome)?;
+        record_signed_consent(envelope, &outcome);
         registry
             .upsert_server(&outcome.name, outcome.server.clone())
             .context("failed to persist MCP server")?;
         applied = true;
     } else if wizard_confirm_apply(&outcome)? {
         summary_shown = true;
+        let envelope = signature_envelope.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Secure Command Signing required: provide --signing-key, --signature, --signed-at, and --nonce (REQ-SEC-01, #74)"
+            )
+        })?;
+        envelope.verify(&outcome)?;
+        record_signed_consent(envelope, &outcome);
         registry
             .upsert_server(&outcome.name, outcome.server.clone())
             .context("failed to persist MCP server")?;
@@ -362,6 +416,25 @@ fn run_wizard(config_overrides: &CliConfigOverrides, args: WizardArgs) -> Result
     }
 
     Ok(())
+}
+
+fn record_signed_consent(envelope: &CommandSignatureEnvelope, outcome: &WizardOutcome) {
+    let mut event = ConsentEvent::new("cli:mcp-wizard", "apply", outcome.name.clone())
+        .with_metadata("nonce", envelope.nonce().to_string())
+        .with_metadata("signed_at", envelope.signed_at().to_rfc3339())
+        .with_metadata("verifying_key", envelope.verifying_key_b64());
+    if let Some(template) = outcome.template_id.as_ref() {
+        event = event.with_metadata("template_id", template.clone());
+    }
+    if let Some(source) = outcome.source.as_ref() {
+        event = event.with_metadata("source_path", source.path.clone());
+        if let Some(hash) = source.integrity_sha256.as_ref() {
+            event = event.with_metadata("source_sha256", hash.clone());
+        }
+    }
+    if let Err(err) = record_consent(event) {
+        tracing::error!(error = ?err, "failed to record consent audit entry");
+    }
 }
 
 fn print_wizard_summary(outcome: &WizardOutcome) {

@@ -1,8 +1,15 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::anyhow;
+use codex_core::mcp::intake::ConfidenceLevel;
+#[cfg(test)]
+use codex_core::mcp::intake::DetectorRegistry;
+use codex_core::mcp::intake::IntakeEngine;
+use codex_core::mcp::intake::IntakePhase;
+use codex_core::mcp::intake::IntakeState;
 use codex_core::mcp::templates::TemplateCatalog;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -47,6 +54,7 @@ pub(crate) struct McpWizardInit {
     pub catalog: TemplateCatalog,
     pub draft: Option<McpWizardDraft>,
     pub existing_name: Option<String>,
+    pub intake_engine: Arc<IntakeEngine>,
 }
 
 pub(crate) struct McpWizardView {
@@ -55,6 +63,9 @@ pub(crate) struct McpWizardView {
     templates: Vec<TemplateSummary>,
     draft: McpWizardDraft,
     existing_name: Option<String>,
+    intake_engine: Arc<IntakeEngine>,
+    intake_state: IntakeState,
+    intake_error: Option<String>,
     screen: WizardScreen,
     field_scroll: ScrollState,
     field_visible_rows: Cell<usize>,
@@ -99,12 +110,15 @@ impl McpWizardView {
             }
         }
 
-        Self {
+        let mut view = Self {
             app_event_tx: init.app_event_tx,
             catalog: init.catalog,
             templates,
             draft,
             existing_name: init.existing_name,
+            intake_engine: init.intake_engine,
+            intake_state: IntakeState::new(),
+            intake_error: None,
             screen,
             field_scroll,
             field_visible_rows: Cell::new(1),
@@ -115,7 +129,9 @@ impl McpWizardView {
             variant_target: None,
             error_message: None,
             close_requested: false,
-        }
+        };
+        view.refresh_intake();
+        view
     }
 
     fn submit(&mut self) {
@@ -153,8 +169,35 @@ impl McpWizardView {
         ensure_selection(&field_entries(&self.draft), &mut self.field_scroll);
     }
 
+    fn refresh_intake(&mut self) {
+        self.intake_state.reset();
+        self.intake_error = None;
+        let path = self.draft.source_path.trim();
+        if path.is_empty() {
+            return;
+        }
+        if let Err(err) = self
+            .intake_engine
+            .begin_session(&mut self.intake_state, path)
+        {
+            self.intake_error = Some(err.to_string());
+        } else if self.intake_state.phase() == IntakePhase::Analysis {
+            if let Err(err) = self
+                .intake_engine
+                .analyze_with_detectors(&mut self.intake_state)
+            {
+                self.intake_error = Some(err.to_string());
+            }
+        }
+    }
+
     fn apply_text(&mut self, field: FieldKind, value: &str) -> anyhow::Result<()> {
         match field {
+            FieldKind::Source => {
+                let trimmed = value.trim();
+                self.draft.source_path = trimmed.to_string();
+                self.refresh_intake();
+            }
             FieldKind::Name => {
                 let trimmed = value.trim();
                 if trimmed.is_empty() {
@@ -465,11 +508,24 @@ impl McpWizardView {
     }
 
     fn render_form(&self, area: Rect, buf: &mut Buffer) {
+        let footer_height = 5.min(area.height).max(3);
+        let preview_height = if area.height > 16 {
+            7
+        } else {
+            area.height.saturating_sub(footer_height + 6).max(3)
+        };
+        let body_height = area
+            .height
+            .saturating_sub(preview_height + footer_height)
+            .max(3);
         let chunks = Layout::vertical([
-            Constraint::Min(area.height.saturating_sub(5)),
-            Constraint::Length(5),
+            Constraint::Length(preview_height),
+            Constraint::Min(body_height),
+            Constraint::Length(footer_height),
         ])
         .split(area);
+
+        self.render_preview(chunks[0], buf);
 
         let entries = field_entries(&self.draft);
         let rows: Vec<Row> = entries
@@ -497,7 +553,7 @@ impl McpWizardView {
         .header(Row::new(vec!["Field".bold(), "Value".bold()]))
         .block(Block::default().borders(Borders::ALL).title("MCP Wizard"))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        let table_area = chunks[0];
+        let table_area = chunks[1];
         StatefulWidget::render(table, table_area, buf, &mut state);
 
         let visible_rows = table_area.height.saturating_sub(3) as usize;
@@ -522,7 +578,7 @@ impl McpWizardView {
         let footer = Paragraph::new(footer_lines)
             .block(Block::default().borders(Borders::ALL).title("Help"))
             .wrap(Wrap { trim: true });
-        Widget::render(footer, chunks[1], buf);
+        Widget::render(footer, chunks[2], buf);
     }
 
     fn render_variant_select(&self, area: Rect, buf: &mut Buffer) {
@@ -577,8 +633,86 @@ impl McpWizardView {
         Widget::render(paragraph, area, buf);
     }
 
+    fn render_preview(&self, area: Rect, buf: &mut Buffer) {
+        let mut lines: Vec<Line> = Vec::new();
+        if let Some(err) = &self.intake_error {
+            lines.push(err.as_str().red().into());
+        }
+
+        let path = self.draft.source_path.trim();
+        if path.is_empty() {
+            lines.push(
+                "Provide the MCP server source path so Codex can analyse its structure."
+                    .dim()
+                    .into(),
+            );
+        } else {
+            lines.push(Line::from(vec!["Source: ".dim(), path.to_string().into()]));
+            if let Some(preview) = self.intake_state.preview() {
+                if !preview.files().is_empty() {
+                    lines.push("Key files:".dim().into());
+                    for file in preview.files() {
+                        lines.push(Line::from(vec!["  • ".into(), file.clone().into()]));
+                    }
+                }
+                for warn in preview.warnings() {
+                    lines.push(Line::from(vec!["⚠ ".yellow(), warn.as_str().yellow()]));
+                }
+            }
+            let policy = self.intake_state.policy_warnings();
+            if !policy.is_empty() {
+                lines.push("Policy warnings:".dim().into());
+                for warn in policy {
+                    lines.push(Line::from(vec!["  • ".into(), warn.as_str().red()]));
+                }
+            }
+            self.append_detector_suggestions(&mut lines);
+        }
+
+        if lines.is_empty() {
+            lines.push("Source context is unavailable.".dim().into());
+        }
+
+        let paragraph = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Source context"),
+            )
+            .wrap(Wrap { trim: true });
+        Widget::render(paragraph, area, buf);
+    }
+
     fn render_summary(&self, area: Rect, buf: &mut Buffer) {
         let mut lines = self.draft.summary_lines();
+        if !self.draft.source_path.trim().is_empty() {
+            lines.push(Line::from(vec![
+                "Source: ".dim(),
+                self.draft.source_path.clone().into(),
+            ]));
+            if let Some(preview) = self.intake_state.preview() {
+                if !preview.files().is_empty() {
+                    lines.push("Key files:".dim().into());
+                    for file in preview.files() {
+                        lines.push(Line::from(vec!["  • ".into(), file.clone().into()]));
+                    }
+                }
+                for warn in preview.warnings() {
+                    lines.push(Line::from(vec!["⚠ ".yellow(), warn.as_str().yellow()]));
+                }
+            }
+            let policy = self.intake_state.policy_warnings();
+            if !policy.is_empty() {
+                lines.push("Policy warnings:".dim().into());
+                for warn in policy {
+                    lines.push(Line::from(vec!["  • ".into(), warn.as_str().red()]));
+                }
+            }
+            self.append_detector_suggestions(&mut lines);
+        }
+        if let Some(err) = &self.intake_error {
+            lines.push(err.as_str().red().into());
+        }
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             "Enter".cyan(),
@@ -592,6 +726,36 @@ impl McpWizardView {
             .block(Block::default().borders(Borders::ALL).title("Review"))
             .wrap(Wrap { trim: true });
         Widget::render(paragraph, area, buf);
+    }
+
+    fn append_detector_suggestions(&self, lines: &mut Vec<Line>) {
+        let suggestions = self.intake_state.suggestions();
+        if suggestions.is_empty() {
+            return;
+        }
+        lines.push("Detector suggestions:".dim().into());
+        for suggestion in suggestions {
+            let message = format!(
+                "{} → {} ({} | reason {})",
+                suggestion.field(),
+                suggestion.value(),
+                confidence_label(suggestion.confidence()),
+                suggestion.reason().as_str()
+            );
+            let styled = match suggestion.confidence() {
+                ConfidenceLevel::High => message.clone().green(),
+                ConfidenceLevel::Medium => message.clone().yellow(),
+                ConfidenceLevel::Low => message.clone().red(),
+                ConfidenceLevel::Unknown => message.clone().dim(),
+            };
+            lines.push(Line::from(vec![Span::raw("  • "), styled]));
+            if let Some(notes) = suggestion.notes() {
+                lines.push(Line::from(vec![Span::raw("    "), notes.to_string().dim()]));
+            }
+            if let Some(path) = suggestion.source_path() {
+                lines.push(Line::from(vec!["    from ".dim(), path.to_string().cyan()]));
+            }
+        }
     }
 }
 
@@ -739,6 +903,15 @@ impl BottomPaneView for McpWizardView {
     }
 }
 
+fn confidence_label(level: ConfidenceLevel) -> &'static str {
+    match level {
+        ConfidenceLevel::High => "high",
+        ConfidenceLevel::Medium => "medium",
+        ConfidenceLevel::Low => "low",
+        ConfidenceLevel::Unknown => "unknown",
+    }
+}
+
 #[derive(Copy, Clone)]
 enum WizardScreen {
     TemplateSelect,
@@ -751,6 +924,7 @@ enum WizardScreen {
 #[derive(Copy, Clone, Debug)]
 enum FieldKind {
     Template,
+    Source,
     Name,
     Command,
     Args,
@@ -787,6 +961,16 @@ fn field_entries(draft: &McpWizardDraft) -> Vec<FieldEntry> {
             .template_id
             .clone()
             .unwrap_or_else(|| "manual".to_string()),
+        enabled: true,
+    });
+    entries.push(FieldEntry {
+        kind: FieldKind::Source,
+        label: "Source path",
+        value: if draft.source_path.trim().is_empty() {
+            "(optional)".to_string()
+        } else {
+            draft.source_path.clone()
+        },
         enabled: true,
     });
     entries.push(FieldEntry {
@@ -1049,6 +1233,7 @@ fn move_selection(
 fn field_label(kind: FieldKind) -> &'static str {
     match kind {
         FieldKind::Template => "Template",
+        FieldKind::Source => "Source path",
         FieldKind::Name => "Name",
         FieldKind::Command => "Command",
         FieldKind::Args => "Args",
@@ -1075,6 +1260,7 @@ fn field_value(draft: &McpWizardDraft, field: FieldKind) -> String {
             .template_id
             .clone()
             .unwrap_or_else(|| "manual".to_string()),
+        FieldKind::Source => draft.source_path.clone(),
         FieldKind::Name => draft.name.clone(),
         FieldKind::Command => draft.command.clone(),
         FieldKind::Args => draft.args.join(" "),
@@ -1256,10 +1442,15 @@ fn next_grapheme_boundary(s: &str, idx: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_core::mcp::intake::IntakeEngine;
+    use codex_core::mcp::intake::ReasonCatalog;
+    use codex_core::mcp::intake::SignalCache;
+    use codex_core::mcp::intake::SourceParser;
     use insta::assert_snapshot;
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
     use tokio::sync::mpsc::unbounded_channel;
 
     fn render(view: &McpWizardView) -> String {
@@ -1291,6 +1482,18 @@ mod tests {
         AppEventSender::new(tx)
     }
 
+    fn test_engine() -> Arc<IntakeEngine> {
+        let catalog = ReasonCatalog::load_embedded().unwrap_or_else(|_| ReasonCatalog::empty());
+        let detectors = Arc::new(DetectorRegistry::new());
+        Arc::new(IntakeEngine::new(
+            SourceParser::new(None),
+            SignalCache::default(),
+            catalog,
+            None,
+            detectors,
+        ))
+    }
+
     fn sample_draft() -> McpWizardDraft {
         let mut env = BTreeMap::new();
         env.insert("API_KEY".to_string(), "${SECRET}".to_string());
@@ -1299,6 +1502,7 @@ mod tests {
         auth_env.insert("TOKEN".to_string(), "${TOKEN}".to_string());
 
         McpWizardDraft {
+            source_path: String::new(),
             name: "anthropic-mcp".to_string(),
             template_id: Some("anthropic/cli".to_string()),
             command: "anthropic-mcp".to_string(),
@@ -1334,6 +1538,7 @@ mod tests {
             catalog: TemplateCatalog::empty(),
             draft: None,
             existing_name: None,
+            intake_engine: test_engine(),
         })
     }
 
@@ -1367,6 +1572,7 @@ mod tests {
             catalog: TemplateCatalog::empty(),
             draft: Some(sample_draft()),
             existing_name: None,
+            intake_engine: test_engine(),
         });
         view.screen = WizardScreen::Form;
         view.error_message = Some("Command must not be empty".to_string());
@@ -1383,6 +1589,7 @@ mod tests {
             catalog: TemplateCatalog::empty(),
             draft: Some(sample_draft()),
             existing_name: None,
+            intake_engine: test_engine(),
         });
         view.screen = WizardScreen::VariantSelect;
         view.variant_target = Some(FieldKind::AuthType);
@@ -1401,6 +1608,7 @@ mod tests {
             catalog: TemplateCatalog::empty(),
             draft: Some(sample_draft()),
             existing_name: None,
+            intake_engine: test_engine(),
         });
         view.screen = WizardScreen::TextEdit(FieldKind::Env);
         view.error_message = Some("Expected KEY=VALUE pairs".to_string());
@@ -1416,6 +1624,7 @@ mod tests {
             catalog: TemplateCatalog::empty(),
             draft: Some(sample_draft()),
             existing_name: Some("existing".to_string()),
+            intake_engine: test_engine(),
         });
         view.screen = WizardScreen::Summary;
 

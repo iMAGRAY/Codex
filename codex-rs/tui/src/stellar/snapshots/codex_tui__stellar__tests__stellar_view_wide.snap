@@ -1,0 +1,24 @@
+---
+source: tui/src/stellar/tests.rs
+expression: terminal.backend()
+---
+"┌ Insight Canvas ────────────────────────────────────────────────────────────────────────────────┐┌ Observability Overlay ─────────────────┐"
+"│Persona: operator                                                                               ││Latency p95     0ms  Audit fallback 0   │"
+"│                                                                                                ││Cache hit 100.0%                        │"
+"│                                                                                                ││[ Investigate ] Ctrl+R - guide the      │"
+"│<type an insight or use CLI bridge>                                                             ││operator runbook                        │"
+"│                                                                                                ││Ctrl+O to hide overlay                  │"
+"│                                                                                                ││                                        │"
+"│⚠ 1 queued offline operation                                                                    ││                                        │"
+"│                                                                                                ││                                        │"
+"│Confidence  94% - High                                                                          ││                                        │"
+"│- Freshness: 0.35                                                                               ││                                        │"
+"│- Source Trust: 0.27                                                                            ││                                        │"
+"│- Schema Validity: 0.19                                                                         ││                                        │"
+"│- Telemetry Alignment: 0.10                                                                     ││                                        │"
+"│- User Overrides: 0.03                                                                          ││                                        │"
+"│                                                                                                ││                                        │"
+"└────────────────────────────────────────────────────────────────────────────────────────────────┘└────────────────────────────────────────┘"
+"┌ Command Log ─────────────────────────────────────────────────────────────────────┐┌ Golden Path ─────────────────────────────────────────┐"
+"│[insight] Investigate APDEX drift                                                 ││Send Insight Ctrl+Enter — Submit current insight for  │"
+"└──────────────────────────────────────────────────────────────────────────────────┘└──────────────────────────────────────────────────────┘"

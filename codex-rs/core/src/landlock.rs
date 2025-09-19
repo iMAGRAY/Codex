@@ -1,4 +1,5 @@
 use crate::protocol::SandboxPolicy;
+use crate::security::ResourceLimits;
 use crate::spawn::StdioPolicy;
 use crate::spawn::spawn_child_async;
 use std::collections::HashMap;
@@ -34,6 +35,7 @@ where
         sandbox_policy,
         stdio_policy,
         env,
+        Some(ResourceLimits::standard()),
     )
     .await
 }

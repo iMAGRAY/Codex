@@ -8,6 +8,9 @@ use crate::mcp::McpManagerState;
 use crate::mcp::McpWizardDraft;
 use crate::pager_overlay::Overlay;
 use crate::resume_picker::ResumeSelection;
+use crate::stellar::ControllerOutcome;
+use crate::stellar::StellarController;
+use crate::stellar::StellarView;
 use crate::tui;
 use crate::tui::TuiEvent;
 use codex_ansi_escape::ansi_escape_line;
@@ -19,18 +22,29 @@ use codex_core::config_types::McpServerConfig;
 use codex_core::mcp::registry::McpRegistry;
 use codex_core::mcp::templates::TemplateCatalog;
 use codex_core::model_family::find_family_for_model;
+use codex_core::orchestrator::QuickstartInput;
+use codex_core::orchestrator::build_quickstart;
 use codex_core::protocol::TokenUsage;
 use codex_core::protocol_config_types::ReasoningEffort as ReasoningEffortConfig;
+use codex_core::stellar::ActionApplied;
+use codex_core::stellar::KernelEvent;
+use codex_core::stellar::StellarPersona;
+use codex_core::telemetry;
+use codex_core::telemetry::TelemetryExporter;
+use codex_core::telemetry::TelemetryInstallError;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
 use color_eyre::eyre::eyre;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
+use crossterm::event::KeyModifiers;
 use crossterm::terminal::supports_keyboard_enhancement;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
 use std::collections::BTreeMap;
+use std::env;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -69,6 +83,7 @@ pub(crate) struct App {
 
     // Esc-backtracking state grouped
     pub(crate) backtrack: crate::app_backtrack::BacktrackState,
+    pub(crate) stellar: StellarController,
 }
 
 impl App {
@@ -86,6 +101,8 @@ impl App {
         let app_event_tx = AppEventSender::new(app_event_tx);
 
         let conversation_manager = Arc::new(ConversationManager::new(auth_manager.clone()));
+
+        setup_telemetry_exporter(&config);
 
         let enhanced_keys_supported = supports_keyboard_enhancement().unwrap_or(false);
 
@@ -147,6 +164,7 @@ impl App {
             has_emitted_history_lines: false,
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             backtrack: BacktrackState::default(),
+            stellar: StellarController::new(StellarPersona::Operator),
         };
 
         let tui_events = tui.event_stream();
@@ -194,15 +212,43 @@ impl App {
                     {
                         return Ok(true);
                     }
-                    tui.draw(
-                        self.chat_widget.desired_height(tui.terminal.size()?.width),
-                        |frame| {
-                            frame.render_widget_ref(&self.chat_widget, frame.area());
-                            if let Some((x, y)) = self.chat_widget.cursor_pos(frame.area()) {
+                    let terminal_size = tui.terminal.size()?;
+                    let width = terminal_size.width;
+                    let stellar_active = self.stellar.is_active();
+                    if stellar_active {
+                        self.stellar.sync_layout(width);
+                    }
+                    let stellar_snapshot = stellar_active.then(|| self.stellar.snapshot());
+                    let stellar_height = if stellar_active {
+                        self.stellar.preferred_height().min(terminal_size.height)
+                    } else {
+                        0
+                    };
+                    let desired_height = self.chat_widget.desired_height(width) + stellar_height;
+                    tui.draw(desired_height, |frame| {
+                        let area = frame.area();
+                        if let Some(snapshot) = stellar_snapshot.as_ref() {
+                            let layout = ratatui::layout::Layout::default()
+                                .direction(ratatui::layout::Direction::Vertical)
+                                .constraints([
+                                    ratatui::layout::Constraint::Length(
+                                        stellar_height.min(area.height),
+                                    ),
+                                    ratatui::layout::Constraint::Min(1),
+                                ])
+                                .split(area);
+                            frame.render_widget(StellarView::new(snapshot), layout[0]);
+                            frame.render_widget_ref(&self.chat_widget, layout[1]);
+                            if let Some((x, y)) = self.chat_widget.cursor_pos(layout[1]) {
                                 frame.set_cursor_position((x, y));
                             }
-                        },
-                    )?;
+                        } else {
+                            frame.render_widget_ref(&self.chat_widget, area);
+                            if let Some((x, y)) = self.chat_widget.cursor_pos(area) {
+                                frame.set_cursor_position((x, y));
+                            }
+                        }
+                    })?;
                 }
             }
         }
@@ -382,6 +428,23 @@ impl App {
         }
         Ok(true)
     }
+    fn on_stellar_event(&mut self, event: KernelEvent) {
+        match event {
+            KernelEvent::Info { message } => self.chat_widget.add_info_message(message, None),
+            KernelEvent::Submission { text } => self
+                .chat_widget
+                .add_info_message(format!("Stellar insight submitted: {text}"), None),
+            KernelEvent::CacheStored { key } => self
+                .chat_widget
+                .add_info_message(format!("Resilience cache updated: {key}"), None),
+            KernelEvent::ConflictResolution { conflict_id, state } => {
+                self.chat_widget.add_info_message(
+                    format!("Conflict {conflict_id} resolved as {:?}", state),
+                    None,
+                )
+            }
+        }
+    }
 
     pub(crate) fn token_usage(&self) -> codex_core::protocol::TokenUsage {
         self.chat_widget.token_usage()
@@ -466,7 +529,11 @@ impl App {
 
         let registry = McpRegistry::new(&self.config, catalog);
         registry
-            .upsert_server_with_existing(existing_name.as_deref(), &draft.name, server_config.clone())
+            .upsert_server_with_existing(
+                existing_name.as_deref(),
+                &draft.name,
+                server_config.clone(),
+            )
             .map_err(|err| eyre!(err))?;
 
         if let Some(ref old_name) = existing_name
@@ -543,10 +610,69 @@ impl App {
     }
 
     async fn handle_key_event(&mut self, tui: &mut tui::Tui, key_event: KeyEvent) {
+        if matches!(
+            key_event,
+            KeyEvent {
+                code: KeyCode::Char('?'),
+                kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                ..
+            }
+        ) {
+            self.open_quickstart_overlay(tui);
+            return;
+        }
+
+        let mut route_to_stellar = self.stellar.is_active();
+        if !route_to_stellar {
+            route_to_stellar = matches!(key_event,
+                KeyEvent {
+                    code: KeyCode::Char('i'),
+                    modifiers,
+                    kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                    ..
+                } if modifiers.contains(KeyModifiers::CONTROL) || modifiers.contains(KeyModifiers::ALT)
+            ) || matches!(key_event,
+                KeyEvent {
+                    code: KeyCode::Char('a'),
+                    modifiers,
+                    kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                    ..
+                } if modifiers == (KeyModifiers::CONTROL | KeyModifiers::ALT)
+            ) || matches!(key_event,
+                KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers,
+                    kind: KeyEventKind::Press | KeyEventKind::Repeat,
+                    ..
+                } if modifiers.contains(KeyModifiers::CONTROL) && modifiers.contains(KeyModifiers::SHIFT)
+            );
+        }
+
+        if route_to_stellar {
+            match self.stellar.handle_key_event(key_event) {
+                ControllerOutcome::Consumed { applied, .. } => {
+                    for event in self.stellar.take_events() {
+                        self.on_stellar_event(event);
+                    }
+                    if matches!(applied, ActionApplied::StateChanged) {
+                        tui.frame_requester().schedule_frame();
+                    }
+                    return;
+                }
+                ControllerOutcome::Rejected { error, .. } => {
+                    self.chat_widget
+                        .add_error_message(format!("Stellar guard: {error}"));
+                    tui.frame_requester().schedule_frame();
+                    return;
+                }
+                ControllerOutcome::Unhandled => {}
+            }
+        }
+
         match key_event {
             KeyEvent {
                 code: KeyCode::Char('t'),
-                modifiers: crossterm::event::KeyModifiers::CONTROL,
+                modifiers: KeyModifiers::CONTROL,
                 kind: KeyEventKind::Press,
                 ..
             } => {
@@ -555,9 +681,6 @@ impl App {
                 self.overlay = Some(Overlay::new_transcript(self.transcript_lines.clone()));
                 tui.frame_requester().schedule_frame();
             }
-            // Esc primes/advances backtracking only in normal (not working) mode
-            // with an empty composer. In any other state, forward Esc so the
-            // active UI (e.g. status indicator, modals, popups) handles it.
             KeyEvent {
                 code: KeyCode::Esc,
                 kind: KeyEventKind::Press | KeyEventKind::Repeat,
@@ -571,7 +694,6 @@ impl App {
                     self.chat_widget.handle_key_event(key_event);
                 }
             }
-            // Enter confirms backtrack when primed + count > 0. Otherwise pass to widget.
             KeyEvent {
                 code: KeyCode::Enter,
                 kind: KeyEventKind::Press,
@@ -580,25 +702,29 @@ impl App {
                 && self.backtrack.count > 0
                 && self.chat_widget.composer_is_empty() =>
             {
-                // Delegate to helper for clarity; preserves behavior.
                 self.confirm_backtrack_from_main();
             }
             KeyEvent {
                 kind: KeyEventKind::Press | KeyEventKind::Repeat,
                 ..
             } => {
-                // Any non-Esc key press should cancel a primed backtrack.
-                // This avoids stale "Esc-primed" state after the user starts typing
-                // (even if they later backspace to empty).
                 if key_event.code != KeyCode::Esc && self.backtrack.primed {
                     self.reset_backtrack_state();
                 }
                 self.chat_widget.handle_key_event(key_event);
             }
-            _ => {
-                // Ignore Release key events.
-            }
-        };
+            _ => {}
+        }
+    }
+
+    fn open_quickstart_overlay(&mut self, tui: &mut tui::Tui) {
+        let lines = quickstart_overlay_lines(self.stellar.persona());
+        let _ = tui.enter_alt_screen();
+        self.overlay = Some(Overlay::new_static_with_title(
+            lines,
+            "Q U I C K S T A R T".to_string(),
+        ));
+        tui.frame_requester().schedule_frame();
     }
 }
 fn sanitize_name(id: &str) -> String {
@@ -613,6 +739,27 @@ fn sanitize_name(id: &str) -> String {
         .collect()
 }
 
+fn quickstart_overlay_lines(persona: StellarPersona) -> Vec<Line<'static>> {
+    let guide = build_quickstart(QuickstartInput { persona });
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    lines.push(guide.headline.bold().into());
+    for section in guide.sections {
+        lines.push(Line::from(""));
+        lines.push(section.title.bold().into());
+        for bullet in section.bullets {
+            lines.push(Line::from(format!("  • {bullet}")));
+        }
+    }
+    if !guide.recommended_commands.is_empty() {
+        lines.push(Line::from(""));
+        lines.push("Recommended commands:".bold().into());
+        for cmd in guide.recommended_commands {
+            lines.push(Line::from(format!("  $ {cmd}")));
+        }
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -622,6 +769,7 @@ mod tests {
     use codex_core::AuthManager;
     use codex_core::CodexAuth;
     use codex_core::ConversationManager;
+    use codex_core::stellar::StellarPersona;
     use ratatui::text::Line;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
@@ -652,6 +800,7 @@ mod tests {
             enhanced_keys_supported: false,
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             backtrack: BacktrackState::default(),
+            stellar: StellarController::new(StellarPersona::Operator),
         }
     }
 
@@ -672,5 +821,58 @@ mod tests {
             app.chat_widget.config_ref().model_reasoning_effort,
             Some(ReasoningEffortConfig::High)
         );
+    }
+
+    #[test]
+    fn quickstart_overlay_contains_pipeline_hints() {
+        let lines = quickstart_overlay_lines(StellarPersona::Operator);
+        let rendered: Vec<String> = lines.iter().map(|line| line.to_string()).collect();
+        assert!(rendered.iter().any(|l| l.contains("pipeline sign")));
+        assert!(rendered.iter().any(|l| l.contains("orchestrator feedback")));
+        assert!(rendered.iter().any(|l| l.contains("orchestrator triage")));
+    }
+}
+
+// Observability Mesh bootstrap (REQ-OBS-01, REQ-OPS-01; MaxThink-Stellar.md).
+fn setup_telemetry_exporter(config: &Config) {
+    let mut exporter_cfg = telemetry::exporter_config(&config.codex_home);
+
+    if let Ok(endpoint) = env::var("CODEX_TELEMETRY_OTLP_ENDPOINT") {
+        let trimmed = endpoint.trim();
+        if !trimmed.is_empty() {
+            exporter_cfg = exporter_cfg.with_otlp_endpoint(trimmed.to_string());
+            if let Ok(headers) = env::var("CODEX_TELEMETRY_OTLP_HEADERS") {
+                for raw in headers.split(',') {
+                    if let Some((key, value)) = raw.split_once('=') {
+                        exporter_cfg = exporter_cfg
+                            .with_otlp_header(key.trim().to_string(), value.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(addr) = env::var("CODEX_TELEMETRY_PROMETHEUS_ADDR") {
+        match addr.parse::<SocketAddr>() {
+            Ok(socket) => {
+                exporter_cfg = exporter_cfg.with_prometheus_bind(socket);
+            }
+            Err(err) => {
+                warn!(%addr, %err, "invalid CODEX_TELEMETRY_PROMETHEUS_ADDR");
+            }
+        }
+    }
+
+    match TelemetryExporter::new(exporter_cfg) {
+        Ok(exporter) => {
+            if let Err(err) = telemetry::install_exporter(exporter) {
+                if !matches!(err, TelemetryInstallError::AlreadyInstalled) {
+                    warn!("failed to install telemetry exporter: {err}");
+                }
+            }
+        }
+        Err(err) => {
+            warn!("failed to initialize telemetry exporter: {err}");
+        }
     }
 }

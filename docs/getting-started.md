@@ -90,6 +90,33 @@ When the chat composer is empty, press Esc to prime “backtrack” mode. Press 
 
 In the transcript preview, the footer shows an `Esc edit prev` hint while editing is active.
 
+#### Ctrl+O Observability overlay
+
+Press `Ctrl+O` to open the Stellar Observability Overlay (REQ-OBS-01/REQ-OPS-01; see `docs/future/MaxThink-Stellar.md`). The overlay highlights latency p95, audit fallback count, and cache hit percentage, and surfaces an `[ Investigate ]` hint that maps to persona-specific runbooks. For a deeper walkthrough, follow [docs/stellar-quickstart.md](stellar-quickstart.md).
+
+#### Trusted pipeline commands
+
+The CLI exposes a lightweight trusted release flow (REQ-OPS-01/REQ-INT-01/REQ-DX-01):
+
+```shell
+export CODEX_PIPELINE_SIGNING_KEY="<base64url-ed25519-secret>"
+codex pipeline sign --name insight --version 1.4.0 --source packs/insight --signer vault:pipeline/insight
+codex pipeline verify dist/insight-1.4.0.tar.gz --expect-fingerprint <fingerprint> --install
+codex pipeline rollback insight 1.3.5
+```
+
+`sign` writes the bundle + manifest into `$CODEX_HOME/pipeline` and records an immutable audit event, `verify` validates the signature/diff (optionally installing the payload), and `rollback` reactivates a previously installed version. See the signed pipeline quickstart for validation steps and traceability requirements.
+
+#### Weekly triage
+
+Run the orchestrator triage helper to capture APDEX, latency, audit fallbacks, and review effort in one snapshot:
+
+```shell
+codex orchestrator triage --persona operator --review-hours 5.0
+```
+
+Targets can be tuned via `--apdex-target`, `--latency-target-ms`, `--audit-target`, and `--review-target-hours`. Archive the output in `docs/future/stellar/metrics-baseline.md` and update the weekly checklist when the command highlights yellow/red statuses.
+
 #### Shell completions
 
 Generate shell completion scripts via:

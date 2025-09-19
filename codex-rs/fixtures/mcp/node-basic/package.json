@@ -1,0 +1,10 @@
+{
+  "name": "node-basic-mcp",
+  "scripts": {
+    "dev": "node server.js",
+    "health-check": "node health.js"
+  },
+  "dependencies": {
+    "express": "4.19.2"
+  }
+}

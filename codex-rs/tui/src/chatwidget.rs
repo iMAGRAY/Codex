@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use codex_core::config::Config;
 use codex_core::config_types::McpServerConfig;
 use codex_core::config_types::Notifications;
 use codex_core::mcp::templates::TemplateCatalog;
@@ -76,6 +76,7 @@ use crate::mcp::McpWizardDraft;
 use crate::mcp::McpWizardInit;
 use crate::mcp::McpWizardView;
 use crate::slash_command::SlashCommand;
+use crate::status_bar::StatusBar;
 use crate::text_formatting::truncate_text;
 use crate::tui::FrameRequester;
 // streaming internals are provided by crate::streaming and crate::markdown_stream
@@ -95,6 +96,15 @@ use codex_common::model_presets::ModelPreset;
 use codex_common::model_presets::builtin_model_presets;
 use codex_core::AuthManager;
 use codex_core::ConversationManager;
+use codex_core::config::Config;
+use codex_core::config::find_codex_home;
+use codex_core::mcp::intake::DetectorRegistry;
+use codex_core::mcp::intake::FingerprintStore;
+use codex_core::mcp::intake::IntakeEngine;
+use codex_core::mcp::intake::ReasonCatalog;
+use codex_core::mcp::intake::SharedFingerprintStore;
+use codex_core::mcp::intake::SignalCache;
+use codex_core::mcp::intake::SourceParser;
 use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
 use codex_core::protocol_config_types::ReasoningEffort as ReasoningEffortConfig;
@@ -639,17 +649,19 @@ impl ChatWidget {
     }
 
     fn layout_areas(&self, area: Rect) -> [Rect; 3] {
-        let bottom_min = self.bottom_pane.desired_height(area.width).min(area.height);
-        let remaining = area.height.saturating_sub(bottom_min);
+        if area.height == 0 {
+            return [Rect::default(); 3];
+        }
+        let header_height = 1u16.min(area.height);
+        let available = area.height.saturating_sub(header_height);
+        let bottom_min = self.bottom_pane.desired_height(area.width).min(available);
+        let remaining = available.saturating_sub(bottom_min);
 
         let active_desired = self
             .active_exec_cell
             .as_ref()
             .map_or(0, |c| c.desired_height(area.width) + 1);
         let active_height = active_desired.min(remaining);
-        // Note: no header area; remaining is not used beyond computing active height.
-
-        let header_height = 0u16;
 
         Layout::vertical([
             Constraint::Length(header_height),
@@ -1387,11 +1399,38 @@ impl ChatWidget {
         draft: Option<McpWizardDraft>,
         existing_name: Option<String>,
     ) {
+        let parser = SourceParser::new(std::env::current_dir().ok());
+        let cache = SignalCache::default();
+        let reasons = ReasonCatalog::load_embedded().unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "Failed to load reason codes; falling back to empty catalog");
+            ReasonCatalog::empty()
+        });
+        let fingerprints = find_codex_home()
+            .ok()
+            .map(|home| home.join("cache").join("mcp_intake_fingerprints.json"))
+            .and_then(|path| {
+                FingerprintStore::load(path, Duration::from_secs(15 * 60))
+                    .map(SharedFingerprintStore::new)
+                    .map_err(|err| {
+                        tracing::warn!(error = %err, "Failed to load fingerprint store");
+                        err
+                    })
+                    .ok()
+            });
+        let detectors = Arc::new(DetectorRegistry::new());
+        let intake_engine = Arc::new(IntakeEngine::new(
+            parser,
+            cache,
+            reasons,
+            fingerprints,
+            detectors,
+        ));
         let init = McpWizardInit {
             app_event_tx: self.app_event_tx.clone(),
             catalog,
             draft,
             existing_name,
+            intake_engine,
         };
         self.bottom_pane
             .show_custom_view(Box::new(McpWizardView::new(init)));
@@ -1519,7 +1558,8 @@ impl ChatWidget {
 
 impl WidgetRef for &ChatWidget {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let [_, active_cell_area, bottom_pane_area] = self.layout_areas(area);
+        let [header_area, active_cell_area, bottom_pane_area] = self.layout_areas(area);
+        StatusBar::render(header_area, buf);
         (&self.bottom_pane).render(bottom_pane_area, buf);
         if !active_cell_area.is_empty()
             && let Some(cell) = &self.active_exec_cell

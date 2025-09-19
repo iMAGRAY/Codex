@@ -17,10 +17,17 @@ use codex_exec::Cli as ExecCli;
 use codex_tui::Cli as TuiCli;
 use std::path::PathBuf;
 
+mod audit_cmd;
 mod mcp_cmd;
+mod orchestrator_cmd;
+mod pipeline_cmd;
+mod stellar_cmd;
 
 use crate::mcp_cmd::McpCli;
+use crate::orchestrator_cmd::OrchestratorCli;
+use crate::pipeline_cmd::PipelineCli;
 use crate::proto::ProtoCli;
+use crate::stellar_cmd::StellarCli;
 
 /// Codex CLI
 ///
@@ -63,9 +70,21 @@ enum Subcommand {
     /// [experimental] Run Codex as an MCP server and manage MCP servers.
     Mcp(McpCli),
 
+    /// Security audit tooling (immutable ledger export).
+    Audit(audit_cmd::AuditCli),
+
     /// Run the Protocol stream via stdin/stdout
     #[clap(visible_alias = "p")]
     Proto(ProtoCli),
+
+    /// Stellar kernel commands (CLI parity with the TUI).
+    Stellar(StellarCli),
+
+    /// Orchestrator helper commands (`/investigate`, `/quickstart`, `/feedback`).
+    Orchestrator(OrchestratorCli),
+
+    /// Trusted pipeline management commands.
+    Pipeline(PipelineCli),
 
     /// Generate shell completion scripts.
     Completion(CompletionCommand),
@@ -194,6 +213,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
             prepend_config_flags(&mut mcp_cli.config_overrides, root_config_overrides.clone());
             mcp_cli.run(codex_linux_sandbox_exe).await?;
         }
+        Some(Subcommand::Audit(audit_cli)) => {
+            audit_cmd::run(audit_cli)?;
+        }
         Some(Subcommand::Resume(ResumeCommand {
             session_id,
             last,
@@ -239,6 +261,15 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
                 root_config_overrides.clone(),
             );
             proto::run_main(proto_cli).await?;
+        }
+        Some(Subcommand::Stellar(stellar_cli)) => {
+            crate::stellar_cmd::run(stellar_cli)?;
+        }
+        Some(Subcommand::Orchestrator(orchestrator_cli)) => {
+            orchestrator_cmd::run(orchestrator_cli)?;
+        }
+        Some(Subcommand::Pipeline(pipeline_cli)) => {
+            pipeline_cmd::run(pipeline_cli)?;
         }
         Some(Subcommand::Completion(completion_cli)) => {
             print_completion(completion_cli);

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tokio::process::Child;
 
 use crate::protocol::SandboxPolicy;
+use crate::security::ResourceLimits;
 use crate::spawn::CODEX_SANDBOX_ENV_VAR;
 use crate::spawn::StdioPolicy;
 use crate::spawn::spawn_child_async;
@@ -92,6 +93,7 @@ pub async fn spawn_command_under_seatbelt(
         sandbox_policy,
         stdio_policy,
         env,
+        Some(ResourceLimits::standard()),
     )
     .await
 }

@@ -7,6 +7,10 @@ pub struct WizardArgs {
     #[arg(long)]
     pub template: Option<String>,
 
+    /// Source path (directory, archive, or manifest) to analyze automatically.
+    #[arg(long = "source")]
+    pub source: Option<String>,
+
     /// Server name (non-interactive mode).
     #[arg(long)]
     pub name: Option<String>,
@@ -74,6 +78,22 @@ pub struct WizardArgs {
     /// Healthcheck protocol (for network types).
     #[arg(long = "health-protocol")]
     pub health_protocol: Option<String>,
+
+    /// Base64url encoded Ed25519 public key for Secure Command Signing (REQ-SEC-01, #74).
+    #[arg(long = "signing-key")]
+    pub signing_key: Option<String>,
+
+    /// Base64url encoded Ed25519 signature for the command envelope.
+    #[arg(long)]
+    pub signature: Option<String>,
+
+    /// RFC3339 timestamp when the command was signed.
+    #[arg(long = "signed-at")]
+    pub signed_at: Option<String>,
+
+    /// Unique nonce included in the signed command envelope.
+    #[arg(long)]
+    pub nonce: Option<String>,
 
     /// Apply configuration without prompting.
     #[arg(long, default_value_t = false)]

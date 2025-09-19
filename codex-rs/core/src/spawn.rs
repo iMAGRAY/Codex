@@ -6,6 +6,7 @@ use tokio::process::Command;
 use tracing::trace;
 
 use crate::protocol::SandboxPolicy;
+use crate::security::ResourceLimits;
 
 /// Experimental environment variable that will be set to some non-empty value
 /// if both of the following are true:
@@ -43,6 +44,7 @@ pub(crate) async fn spawn_child_async(
     sandbox_policy: &SandboxPolicy,
     stdio_policy: StdioPolicy,
     env: HashMap<String, String>,
+    resource_limits: Option<ResourceLimits>,
 ) -> std::io::Result<Child> {
     trace!(
         "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {sandbox_policy:?} {stdio_policy:?} {env:?}"
@@ -66,24 +68,24 @@ pub(crate) async fn spawn_child_async(
 
     // This relies on prctl(2), so it only works on Linux.
     #[cfg(target_os = "linux")]
-    unsafe {
-        cmd.pre_exec(|| {
-            // This prctl call effectively requests, "deliver SIGTERM when my
-            // current parent dies."
-            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-
-            // Though if there was a race condition and this pre_exec() block is
-            // run _after_ the parent (i.e., the Codex process) has already
-            // exited, then the parent is the _init_ process (which will never
-            // die), so we should just terminate the child process now.
-            if libc::getppid() == 1 {
-                libc::raise(libc::SIGTERM);
-            }
-            Ok(())
-        });
+    {
+        let limits = resource_limits.unwrap_or_else(ResourceLimits::standard);
+        unsafe {
+            cmd.pre_exec(move || {
+                limits.apply()?;
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::getppid() == 1 {
+                    libc::raise(libc::SIGTERM);
+                }
+                Ok(())
+            });
+        }
     }
+
+    #[cfg(not(target_os = "linux"))]
+    let _ = resource_limits;
 
     match stdio_policy {
         StdioPolicy::RedirectForShellTool => {

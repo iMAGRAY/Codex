@@ -2,10 +2,10 @@
 source: tui/src/chatwidget/tests.rs
 expression: terminal.backend()
 ---
+"Latency p95     0ms  Audit fallback 0  Cache hit 100.0%  Ctrl+O Observability   "
 "                                                                                "
 "this is a test reason such as one that would be produced by the model           "
 "                                                                                "
 "▌Allow command?                                                                 "
 "▌ Yes   Always   No, provide feedback                                           "
-"▌ Approve and run the command                                                   "
 "                                                                                "

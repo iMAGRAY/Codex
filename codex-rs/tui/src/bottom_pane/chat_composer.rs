@@ -1,4 +1,5 @@
 use codex_core::protocol::TokenUsageInfo;
+use codex_core::security::SecretBroker;
 use codex_protocol::num_format::format_si_suffix;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -201,15 +202,16 @@ impl ChatComposer {
     }
 
     pub fn handle_paste(&mut self, pasted: String) -> bool {
-        let char_count = pasted.chars().count();
+        let sanitized = SecretBroker::global().scrub_text(&pasted);
+        let char_count = sanitized.chars().count();
         if char_count > LARGE_PASTE_CHAR_THRESHOLD {
             let placeholder = format!("[Pasted Content {char_count} chars]");
             self.textarea.insert_element(&placeholder);
-            self.pending_pastes.push((placeholder, pasted));
-        } else if char_count > 1 && self.handle_paste_image_path(pasted.clone()) {
+            self.pending_pastes.push((placeholder, sanitized));
+        } else if char_count > 1 && self.handle_paste_image_path(sanitized.clone()) {
             self.textarea.insert_str(" ");
         } else {
-            self.textarea.insert_str(&pasted);
+            self.textarea.insert_str(&sanitized);
         }
         // Explicit paste events should not trigger Enter suppression.
         self.paste_burst.clear_after_explicit_paste();
@@ -1462,9 +1464,9 @@ mod tests {
             // Unicode examples
             ("@İstanbul", 3, Some("İstanbul".to_string()), "Turkish text"),
             (
-                "@testЙЦУ.rs",
+                "@testXYZ.rs",
                 8,
-                Some("testЙЦУ.rs".to_string()),
+                Some("testXYZ.rs".to_string()),
                 "Mixed ASCII and Cyrillic",
             ),
             ("@诶", 2, Some("诶".to_string()), "Chinese character"),
@@ -1558,7 +1560,7 @@ mod tests {
                 "@ token after full-width space",
             ),
             (
-                "@ЙЦУ　@诶",
+                "@XYZ　@诶",
                 10,
                 Some("诶".to_string()),
                 "Full-width space between Unicode tokens",

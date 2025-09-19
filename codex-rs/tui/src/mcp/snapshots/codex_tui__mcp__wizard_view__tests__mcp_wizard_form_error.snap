@@ -1,19 +1,20 @@
 ---
 source: tui/src/mcp/wizard_view.rs
+assertion_line: 1582
 expression: render(&view)
 ---
+┌Source context──────────────────────────────────────────────────────────────┐
+│Provide the MCP server source path so Codex can analyse its structure.      │
+│                                                                            │
+│                                                                            │
+│                                                                            │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
 ┌MCP Wizard──────────────────────────────────────────────────────────────────┐
 │Field                       Value                                           │
 │Template                    anthropic/cli                                   │
+│Source path                 (optional)                                      │
 │Name                        anthropic-mcp                                   │
-│Command                     anthropic-mcp                                   │
-│Args                        --serve --port 8080                             │
-│Env                         1 entry                                         │
-│Description                 Anthropic MCP bridge                            │
-│Tags                        anthropic, beta                                 │
-│Startup timeout (ms)        15000                                           │
-│Auth type                   env                                             │
-│Auth secret                 vault:anthropic                                 │
 └────────────────────────────────────────────────────────────────────────────┘
 ┌Help────────────────────────────────────────────────────────────────────────┐
 │Command must not be empty                                                   │

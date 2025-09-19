@@ -16,6 +16,8 @@ workspace = true
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 codex-arg0 = { path = "../arg0" }
@@ -27,8 +29,12 @@ codex-login = { path = "../login" }
 codex-mcp-server = { path = "../mcp-server" }
 codex-protocol = { path = "../protocol" }
 codex-tui = { path = "../tui" }
+ed25519-dalek = { version = "2", features = ["std"] }
 inquire = "0.7"
+sha2 = "0.10"
+semver = "1.0.23"
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = [
     "io-std",
     "macros",

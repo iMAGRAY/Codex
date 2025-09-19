@@ -1,0 +1,7 @@
+[project]
+name = "python-basic-mcp"
+version = "0.1.0"
+dependencies = ["fastapi"]
+
+[tool.mcp]
+entry-point = "main:app"

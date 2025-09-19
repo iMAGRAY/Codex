@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "codes": [
+    {
+      "id": "source.dir.detected",
+      "title": "Directory Source",
+      "description": "Source path is a directory and will be scanned for key files.",
+      "tags": ["source", "info"]
+    },
+    {
+      "id": "source.manifest.detected",
+      "title": "Manifest Source",
+      "description": "Source file appears to be an MCP manifest and will be parsed directly.",
+      "tags": ["source", "info"]
+    },
+    {
+      "id": "source.archive.detected",
+      "title": "Archive Source",
+      "description": "Source file is an archive and will be unpacked into a sandboxed temporary directory.",
+      "tags": ["source", "info"]
+    },
+    {
+      "id": "source.policy.outside_project",
+      "title": "Outside Project",
+      "description": "The selected source lives outside of the current project root and may violate policy.",
+      "tags": ["policy", "warning"],
+      "severity": "warning"
+    },
+    {
+      "id": "source.policy.forbidden_prefix",
+      "title": "Restricted Location",
+      "description": "The selected source is located in a restricted system directory and should not be used for MCP deployment.",
+      "tags": ["policy", "error"],
+      "severity": "error"
+    }
+  ]
+}

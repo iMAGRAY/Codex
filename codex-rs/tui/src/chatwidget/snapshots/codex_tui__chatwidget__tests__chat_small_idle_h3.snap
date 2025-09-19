@@ -2,6 +2,6 @@
 source: tui/src/chatwidget/tests.rs
 expression: terminal.backend()
 ---
-"                                        "
+"Latency p95     0ms  Audit fallback 0  C"
 "▌ Ask Codex to do anything              "
 "                                        "

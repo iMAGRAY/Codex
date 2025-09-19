@@ -978,7 +978,7 @@ mod tests {
             }
             86..=92 => {
                 // Some non-latin single codepoints (Greek, Cyrillic, Hebrew)
-                let choices = ["Ω", "β", "Ж", "ю", "ש", "م", "ह"];
+                let choices = ["Ω", "β", "Δ", "ψ", "ש", "م", "ह"];
                 choices[rng.random_range(0..choices.len())].to_string()
             }
             _ => {

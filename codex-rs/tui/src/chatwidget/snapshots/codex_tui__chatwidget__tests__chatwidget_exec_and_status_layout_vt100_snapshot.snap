@@ -4,8 +4,8 @@ expression: visual
 ---
 > I’m going to search the repo for where “Change Approved” is rendered to update
   that view.
+Latency p95     0ms  Audit fallback 0  Cache hit 100.0%  Ctrl+O Observability
 
-• Explored
   └ Search Change Approved
     Read diff_render.rs
 

@@ -16,6 +16,7 @@ use ratatui::text::Line;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct McpWizardDraft {
+    pub source_path: String,
     pub name: String,
     pub template_id: Option<String>,
     pub command: String,
@@ -75,6 +76,7 @@ impl McpWizardDraft {
         });
 
         Self {
+            source_path: String::new(),
             name,
             template_id: cfg.template_id.clone(),
             command: cfg.command.clone(),
@@ -201,6 +203,12 @@ impl McpWizardDraft {
         let mut lines: Vec<Line> = Vec::new();
         lines.push("MCP Wizard Summary".bold().into());
         lines.push(Line::from(""));
+        if !self.source_path.trim().is_empty() {
+            lines.push(Line::from(vec![
+                "Source path: ".dim(),
+                self.source_path.clone().into(),
+            ]));
+        }
         lines.push(Line::from(vec!["Name: ".dim(), self.name.clone().into()]));
         if let Some(template) = self.template_id.as_ref() {
             lines.push(Line::from(vec![

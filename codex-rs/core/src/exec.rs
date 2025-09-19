@@ -9,6 +9,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 use async_channel::Sender;
+use chrono::DateTime;
+use chrono::Utc;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::BufReader;
@@ -24,8 +26,14 @@ use crate::protocol::ExecCommandOutputDeltaEvent;
 use crate::protocol::ExecOutputStream;
 use crate::protocol::SandboxPolicy;
 use crate::seatbelt::spawn_command_under_seatbelt;
+use crate::security::AuditEvent;
+use crate::security::AuditEventKind;
+use crate::security::ResourceLimits;
+use crate::security::SecretBroker;
+use crate::security::append_audit_event;
 use crate::spawn::StdioPolicy;
 use crate::spawn::spawn_child_async;
+use crate::telemetry::TelemetryHub;
 
 const DEFAULT_TIMEOUT_MS: u64 = 10_000;
 
@@ -85,7 +93,12 @@ pub async fn process_exec_tool_call(
     codex_linux_sandbox_exe: &Option<PathBuf>,
     stdout_stream: Option<StdoutStream>,
 ) -> Result<ExecToolCallOutput> {
+    let audit_started_at = Utc::now();
     let start = Instant::now();
+
+    let mut params = params;
+    SecretBroker::global().ensure_env_secret(&mut params.env);
+    let audit_snapshot = params.clone();
 
     let timeout_duration = params.timeout_duration();
 
@@ -133,25 +146,58 @@ pub async fn process_exec_tool_call(
             #[allow(unused_mut)]
             let mut timed_out = raw_output.timed_out;
 
+            let mut resource_notice: Option<String> = None;
+
             #[cfg(target_family = "unix")]
             {
                 if let Some(signal) = raw_output.exit_status.signal() {
                     if signal == TIMEOUT_CODE {
                         timed_out = true;
+                    } else if let Some(msg) = crate::security::resource_signal_message(signal) {
+                        resource_notice = Some(format!("{msg} (signal {signal})"));
                     } else {
                         return Err(CodexErr::Sandbox(SandboxErr::Signal(signal)));
                     }
                 }
             }
 
-            let mut exit_code = raw_output.exit_status.code().unwrap_or(-1);
+            let mut exit_code = raw_output.exit_status.code().unwrap_or_else(|| {
+                #[cfg(target_family = "unix")]
+                {
+                    if let Some(signal) = raw_output.exit_status.signal() {
+                        return EXIT_CODE_SIGNAL_BASE + signal;
+                    }
+                }
+                -1
+            });
             if timed_out {
                 exit_code = EXEC_TIMEOUT_EXIT_CODE;
             }
 
-            let stdout = raw_output.stdout.from_utf8_lossy();
-            let stderr = raw_output.stderr.from_utf8_lossy();
-            let aggregated_output = raw_output.aggregated_output.from_utf8_lossy();
+            let broker = SecretBroker::global();
+            let mut stdout = raw_output.stdout.from_utf8_lossy();
+            broker.scrub_string(&mut stdout.text);
+            let mut stderr = raw_output.stderr.from_utf8_lossy();
+            broker.scrub_string(&mut stderr.text);
+            let mut aggregated_output = raw_output.aggregated_output.from_utf8_lossy();
+            broker.scrub_string(&mut aggregated_output.text);
+
+            if let Some(notice) = resource_notice.as_ref() {
+                if !stderr.text.is_empty() && !stderr.text.ends_with("\n") {
+                    stderr.text.push_str("\n");
+                }
+                stderr
+                    .text
+                    .push_str(&format!("[resource-shield] {notice}\n"));
+                if !aggregated_output.text.is_empty() && !aggregated_output.text.ends_with("\n") {
+                    aggregated_output.text.push_str("\n");
+                }
+                aggregated_output
+                    .text
+                    .push_str(&format!("[resource-shield] {notice}\n"));
+                tracing::warn!(notice, "sandbox resource shield triggered");
+            }
+
             let exec_output = ExecToolCallOutput {
                 exit_code,
                 stdout,
@@ -160,23 +206,57 @@ pub async fn process_exec_tool_call(
                 duration,
                 timed_out,
             };
+            let status = if timed_out {
+                ExecAuditStatus::Timeout
+            } else if exit_code != 0 && is_likely_sandbox_denied(sandbox_type, exit_code) {
+                ExecAuditStatus::SandboxDenied
+            } else {
+                ExecAuditStatus::Success
+            };
 
-            if timed_out {
-                return Err(CodexErr::Sandbox(SandboxErr::Timeout {
-                    output: Box::new(exec_output),
-                }));
+            if status == ExecAuditStatus::Success {
+                TelemetryHub::global().record_exec_latency(duration);
             }
 
-            if exit_code != 0 && is_likely_sandbox_denied(sandbox_type, exit_code) {
-                return Err(CodexErr::Sandbox(SandboxErr::Denied {
-                    output: Box::new(exec_output),
-                }));
-            }
+            append_exec_audit_event(
+                audit_started_at,
+                &audit_snapshot,
+                sandbox_type,
+                sandbox_policy,
+                duration,
+                status,
+                Some(&exec_output),
+                None,
+                resource_notice.clone(),
+            )?;
 
-            Ok(exec_output)
+            match status {
+                ExecAuditStatus::Success => Ok(exec_output),
+                ExecAuditStatus::Timeout => Err(CodexErr::Sandbox(SandboxErr::Timeout {
+                    output: Box::new(exec_output),
+                })),
+                ExecAuditStatus::SandboxDenied => Err(CodexErr::Sandbox(SandboxErr::Denied {
+                    output: Box::new(exec_output),
+                })),
+                ExecAuditStatus::Failure => unreachable!("failure status handled in error branch"),
+            }
         }
         Err(err) => {
             tracing::error!("exec error: {err}");
+            let err_string = err.to_string();
+            if let Err(audit_err) = append_exec_audit_event(
+                audit_started_at,
+                &audit_snapshot,
+                sandbox_type,
+                sandbox_policy,
+                duration,
+                ExecAuditStatus::Failure,
+                None,
+                Some(err_string.as_str()),
+                None,
+            ) {
+                tracing::error!(error = ?audit_err, "failed to append exec audit entry after error");
+            }
             Err(err)
         }
     }
@@ -249,6 +329,160 @@ pub struct ExecToolCallOutput {
     pub timed_out: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExecAuditStatus {
+    Success,
+    Timeout,
+    SandboxDenied,
+    Failure,
+}
+
+impl ExecAuditStatus {
+    fn action(self) -> &'static str {
+        match self {
+            ExecAuditStatus::Success => "exec_succeeded",
+            ExecAuditStatus::Timeout => "exec_timeout",
+            ExecAuditStatus::SandboxDenied => "exec_denied",
+            ExecAuditStatus::Failure => "exec_failed",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            ExecAuditStatus::Success => "success",
+            ExecAuditStatus::Timeout => "timeout",
+            ExecAuditStatus::SandboxDenied => "sandbox_denied",
+            ExecAuditStatus::Failure => "failure",
+        }
+    }
+}
+
+fn append_exec_audit_event(
+    audit_started_at: DateTime<Utc>,
+    snapshot: &ExecParams,
+    sandbox_type: SandboxType,
+    sandbox_policy: &SandboxPolicy,
+    duration: Duration,
+    status: ExecAuditStatus,
+    output: Option<&ExecToolCallOutput>,
+    error_message: Option<&str>,
+    resource_notice: Option<String>,
+) -> io::Result<()> {
+    let broker = SecretBroker::global();
+    let command_repr = snapshot.command.join(" ");
+    let scrubbed_command = broker.scrub_text(&command_repr);
+
+    let mut metadata = HashMap::new();
+    metadata.insert("status".to_string(), status.label().to_string());
+    metadata.insert("command".to_string(), scrubbed_command);
+    metadata.insert("cwd".to_string(), snapshot.cwd.display().to_string());
+    metadata.insert("sandbox_type".to_string(), format!("{sandbox_type:?}"));
+    metadata.insert("duration_ms".to_string(), duration.as_millis().to_string());
+
+    if let Some(timeout_ms) = snapshot.timeout_ms {
+        metadata.insert("timeout_ms".to_string(), timeout_ms.to_string());
+    }
+    if let Some(flag) = snapshot.with_escalated_permissions {
+        metadata.insert("escalated_permissions".to_string(), flag.to_string());
+    }
+    if let Some(justification) = snapshot.justification.as_ref() {
+        metadata.insert(
+            "justification".to_string(),
+            broker.scrub_text(justification),
+        );
+    }
+    if let Some(notice) = resource_notice.as_ref() {
+        metadata.insert("resource_notice".to_string(), broker.scrub_text(notice));
+    }
+    if let Ok(policy) = serde_json::to_string(sandbox_policy) {
+        metadata.insert("sandbox_policy".to_string(), policy);
+    }
+
+    if let Some(out) = output {
+        metadata.insert("exit_code".to_string(), out.exit_code.to_string());
+        metadata.insert("timed_out".to_string(), out.timed_out.to_string());
+    }
+
+    if let Some(message) = error_message {
+        metadata.insert("error".to_string(), broker.scrub_text(message));
+    }
+
+    let mut event = AuditEvent::new(
+        AuditEventKind::SandboxExec,
+        "core:exec",
+        status.action(),
+        snapshot.cwd.display().to_string(),
+    )
+    .with_timestamp(audit_started_at);
+
+    for (key, value) in metadata {
+        event = event.with_metadata(key, value);
+    }
+
+    if let Err(err) = append_audit_event(event) {
+        tracing::error!(
+            error = ?err,
+            "failed to append exec audit entry (REQ-SEC-02); continuing without audit"
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::security::SecretScope;
+    use crate::security::export_audit_records;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    #[test]
+    fn append_exec_audit_event_masks_secrets() {
+        let codex_home = TempDir::new().expect("tempdir");
+        let codex_home_path = codex_home.path().to_path_buf();
+        unsafe {
+            std::env::set_var("CODEX_HOME", &codex_home_path);
+        }
+        std::mem::forget(codex_home);
+
+        let secret = "super-secret".to_string();
+        SecretBroker::global().register_secret(secret.clone(), SecretScope::Session);
+
+        let snapshot = ExecParams {
+            command: vec!["/bin/echo".to_string(), secret.clone()],
+            cwd: codex_home_path.clone(),
+            timeout_ms: Some(1000),
+            env: HashMap::new(),
+            with_escalated_permissions: Some(false),
+            justification: Some("test".to_string()),
+        };
+
+        append_exec_audit_event(
+            Utc::now(),
+            &snapshot,
+            SandboxType::None,
+            &SandboxPolicy::new_read_only_policy(),
+            Duration::from_millis(10),
+            ExecAuditStatus::SandboxDenied,
+            None,
+            Some("permission denied"),
+            None,
+        )
+        .expect("append audit");
+
+        let records = export_audit_records().expect("export records");
+        let last = records.last().expect("audit record");
+        let command_meta = last
+            .metadata
+            .iter()
+            .find(|entry| entry.key == "command")
+            .expect("command metadata");
+        assert!(!command_meta.value.contains(&secret));
+        assert!(command_meta.value.contains("***"));
+    }
+}
+
 async fn exec(
     params: ExecParams,
     sandbox_policy: &SandboxPolicy,
@@ -274,6 +508,7 @@ async fn exec(
         sandbox_policy,
         StdioPolicy::RedirectForShellTool,
         env,
+        Some(ResourceLimits::standard()),
     )
     .await?;
     consume_truncated_output(child, timeout, stdout_stream).await

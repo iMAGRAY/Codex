@@ -2,5 +2,5 @@
 source: tui/src/chatwidget/tests.rs
 expression: terminal.backend()
 ---
-"  Thinking (0s • Esc to interrupt)      "
+"Latency p95     0ms  Audit fallback 0  C"
 "▌ Ask Codex to do anything              "
