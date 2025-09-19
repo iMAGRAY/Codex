@@ -36,7 +36,7 @@ const GENERATED_SECRET_LEN: usize = 32;
 const ENV_SECRET_KEY: &str = "CODEX_DYNAMIC_SECRET";
 
 const DEFAULT_CPU_LIMIT_SECS: u64 = 120;
-const DEFAULT_MEMORY_LIMIT_BYTES: u64 = 1 * 1024 * 1024 * 1024; // 1 GiB
+const DEFAULT_MEMORY_LIMIT_BYTES: u64 = 8 * 1024 * 1024 * 1024; // 8 GiB
 
 const AUDIT_LEDGER_DIR: &str = "audit-ledger";
 const AUDIT_ENTRIES_TREE: &[u8] = b"stellar-audit-entries";

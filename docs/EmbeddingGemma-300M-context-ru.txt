@@ -1,0 +1,162 @@
+EmbeddingGemma 300M — Контекст для продакшн-оптимизации (RU, сентябрь 2025)
+
+Этот файл создан для быстрого внедрения EmbeddingGemma 300M. Рядом с каждым утверждением указаны ссылки на первоисточники.
+
+──────────────────────────────────────────────────────────────────────────────
+
+1) Что подтверждено официально
+• Архитектура/размер/контекст/языки/выход и Matryoshka (768/512/256/128): EmbeddingGemma ≈300M параметров, контекст 2048 токенов, выход 768d с MRL-усечением до 512/256/128. (Источник: https://huggingface.co/google/embeddinggemma-300m , https://ai.google.dev/gemma/docs/embeddinggemma)
+• Лицензия: Gemma (разрешено ответственное коммерческое использование). (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• Результаты: «высочайший рейтинг среди открытых мультиязычных моделей <500M на MTEB» (на момент релиза). (Источник: https://developers.googleblog.com/en/introducing-embeddinggemma/)
+• MRL требует повторной нормализации после усечения размерности. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• ВАЖНО: активации EmbeddingGemma НЕ поддерживают float16; используйте float32 или bfloat16. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+2) Канонические промпты (используйте дословно)
+(Полный список и описания задач в карточке модели.)
+• Retrieval — запрос:   task: search result | query: {{ваш_запрос}}  (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• Retrieval — документ с заголовком:   title: {{заголовок}} | text: {{текст}}  (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• Retrieval — документ без заголовка:   title: "none" | text: {{текст}}  (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• Другие задачи: classification / clustering / sentence similarity / fact checking / question answering / code retrieval — по форме task: … | query: {{текст}}. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• В Sentence Transformers лучше использовать encode_query()/encode_document() — они применяют корректные промпты/задачи автоматически для IR. (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+3) Matryoshka (MRL): как резать размерность
+• Поддерживаемые размерности: 768 / 512 / 256 / 128. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• При усечении обязательно нормализуйте векторы (normalize_embeddings=True). (Источник: https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers , https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• Для поиска используйте inner product (dot) по нормализованным векторам; это эквивалент cosine и быстрее в FAISS. (Источник: https://github.com/facebookresearch/faiss/issues/95)
+• Практические дропы качества (MTEB Multilingual v2, Mean(Task)): 768d=61.15 → 512d=60.71 (−0.44), 256d=59.68 (−1.47), 128d=58.23 (−2.92). (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+4) Квантизация (QAT)
+• Доступные чекпойнты: Q4_0, Q8_0, Mixed (e4_a8_f4_p4) — минимальный дроп на MTEB. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• RAM <200MB с квантизацией (пример/оценка Google для on‑device). (Источник: https://developers.googleblog.com/en/introducing-embeddinggemma/)
+
+5) Типы чисел и устройства
+• Жёсткое правило: не использовать float16 (fp16). Выбирайте bfloat16 (GPU с BF16) или float32 (CPU/совместимый GPU). (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+6) Минимально корректная настройка RAG/поиска (фрагменты)
+# Инициализация ST с безопасным dtype
+from sentence_transformers import SentenceTransformer
+import torch
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype  = torch.bfloat16 if (device=="cuda" and torch.cuda.is_bf16_supported()) else torch.float32
+model  = SentenceTransformer("google/embeddinggemma-300m", device=device, model_kwargs={"torch_dtype": dtype})
+model.eval()
+# (Источник: https://huggingface.co/google/embeddinggemma-300m , https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+# Код для RAG с авто‑промптами
+q_emb = model.encode_query(user_query, normalize_embeddings=True)
+d_emb = model.encode_document(docs, normalize_embeddings=True)
+# (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+# MRL‑усечение + нормализация
+emb = model.encode(texts, truncate_dim=512, normalize_embeddings=True, convert_to_numpy=True, batch_size=32, show_progress_bar=False)
+# (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+# FAISS: inner product по нормализованным векторам ≡ cosine
+import faiss, numpy as np
+faiss.normalize_L2(emb)
+index = faiss.IndexFlatIP(emb.shape[1])
+index.add(emb.astype(np.float32))
+# (Источник: https://github.com/facebookresearch/faiss/issues/95)
+
+7) Рекомендованные продакшн‑профили (практика)
+• Баланс по умолчанию: 512‑d + нормализация + FAISS IP; батч 32 (GPU)/16 (CPU). (Производственный совет, источники по truncate_dim/нормализации: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• Экономия памяти/edge: 256‑d или 128‑d + Q4_0; ожидаем небольшой дроп по таблице MTEB. (Источник таблицы: https://huggingface.co/google/embeddinggemma-300m)
+• Интеграции для сервинга: TEI 1.8.1+ и Workers AI. (Источник: https://huggingface.co/blog/embeddinggemma , https://developers.cloudflare.com/workers-ai/models/embeddinggemma-300m/)
+
+8) Sanity‑проверки (CI/health)
+• Промпты на месте (или используются encode_query/encode_document). (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html , https://huggingface.co/google/embeddinggemma-300m)
+• Размерность эмбеддинга в данных и индексе совпадает (учёт truncate_dim). (Источник по truncate_dim: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• Векторы нормализованы (норма ~1) при использовании dot/IP. (Источник: https://github.com/facebookresearch/faiss/issues/95)
+• Dtype ≠ fp16. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+9) Fine‑tuning (Sentence Transformers)
+• Гайд по fine‑tuning EmbeddingGemma c ST: (Источник: https://ai.google.dev/gemma/docs/embeddinggemma/fine-tuning-embeddinggemma-with-sentence-transformers)
+• Используйте MultipleNegativesRankingLoss в связке с MatryoshkaLoss; обучающие триплеты (anchor, positive, negative). (Общее руководство по MRL/матрешке: https://sbert.net/examples/sentence_transformer/training/matryoshka/README.html)
+
+10) Интеграции и сервинг
+• Sentence Transformers — основной фреймворк инференса/обучения. (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• TEI (Text Embeddings Inference) — сервинг EmbeddingGemma (v1.8.1+), есть готовые docker‑команды. (Источник: https://huggingface.co/blog/embeddinggemma , https://github.com/huggingface/text-embeddings-inference)
+• Workers AI (Cloudflare) — готовая модель @cf/google/embeddinggemma-300m. (Источник: https://developers.cloudflare.com/workers-ai/models/embeddinggemma-300m/ , https://developers.cloudflare.com/workers-ai/changelog/)
+• LiteRT / AI Edge RAG — он‑девайс сборки для Android/iOS. (Источник: https://huggingface.co/litert-community/embeddinggemma-300m)
+
+11) Частые ошибки и решения
+• «Слабый ретрив» при подаче текста без инструктивных промптов — добавьте промпт/используйте encode_query/encode_document. (Источник: https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers , https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• Ошибки с fp16 — у модели не поддержаны активации float16. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• Перепутаны query/document‑промпты — используйте специализированные методы ST. (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+12) Код‑шпаргалка (боевые пресеты)
+
+A) Безопасная загрузка и dtype
+from sentence_transformers import SentenceTransformer
+import torch
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.bfloat16 if (device=="cuda" and torch.cuda.is_bf16_supported()) else torch.float32
+model = SentenceTransformer("google/embeddinggemma-300m", device=device, model_kwargs={"torch_dtype": dtype})
+model.eval()
+# (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+B) RAG с авто‑промптами
+q_emb = model.encode_query(user_query, normalize_embeddings=True)
+d_emb = model.encode_document(docs, normalize_embeddings=True)
+# (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+C) MRL‑усечение + нормализация
+emb = model.encode(texts, truncate_dim=512, normalize_embeddings=True, convert_to_numpy=True)
+# (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+
+D) FAISS: inner product = cosine при нормализации
+import faiss, numpy as np
+faiss.normalize_L2(emb)
+index = faiss.IndexFlatIP(emb.shape[1])
+index.add(emb.astype(np.float32))
+# (Источник: https://github.com/facebookresearch/faiss/issues/95)
+
+13) Быстрая таблица для агента (ключ→значение→источник)
+• MODEL_ID: google/embeddinggemma-300m — https://huggingface.co/google/embeddinggemma-300m
+• EMBED_DIM: 512 (баланс) — таблица MRL/дропов: https://huggingface.co/google/embeddinggemma-300m
+• DTYPE: bf16 (GPU) / f32 (CPU), не fp16 — https://huggingface.co/google/embeddinggemma-300m
+• NORMALIZE: true — https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers
+• SIM_METRIC: dot (FAISS IP по нормализованным векторам ≡ cosine) — https://github.com/facebookresearch/faiss/issues/95
+• PROMPTS: обязателен инструктивный префикс или encode_query/encode_document — https://huggingface.co/google/embeddinggemma-300m , https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html
+• QAT: Q8_0 (минимальный дроп) или Q4_0 — https://huggingface.co/google/embeddinggemma-300m
+
+14) Контрольные инварианты (CI)
+• Проверка наличия "task:"/ "title:"/ "text:" или использование encode_query/encode_document. (Источник: https://huggingface.co/google/embeddinggemma-300m , https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• Согласованность размерностей с индексом (учёт truncate_dim). (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html)
+• Нормализация векторов при использовании dot/IP. (Источник: https://github.com/facebookresearch/faiss/issues/95)
+• Отсутствие fp16. (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+15) Производительность/ресурсы (официальные ориентиры)
+• «Может работать при <200MB RAM с квантизацией (on‑device)» — заявление Google. (Источник: https://developers.googleblog.com/en/introducing-embeddinggemma/)
+
+16) Точки интеграции
+• Workers AI (Cloudflare): модель @cf/google/embeddinggemma-300m. (Источник: https://developers.cloudflare.com/workers-ai/models/embeddinggemma-300m/ , https://developers.cloudflare.com/workers-ai/changelog/)
+• TEI (HF): поддержка EmbeddingGemma (v1.8.1+) + docker‑команды. (Источник: https://huggingface.co/blog/embeddinggemma , https://github.com/huggingface/text-embeddings-inference)
+• LiteRT / AI Edge RAG: мобильные варианты. (Источник: https://huggingface.co/litert-community/embeddinggemma-300m)
+
+17) Качество на ваших данных — быстрая методика
+• Создать «золотой» набор (запрос→релевантные документы).
+• Прогнать профили 768/512/256/128 и FP32/BF16/Q8_0/Q4_0; выбрать профиль по recall@k и nDCG@k. (Источник по таблицам MRL/QAT: https://huggingface.co/google/embeddinggemma-300m)
+• При необходимости добавить лёгкий cross‑encoder/reranker.
+
+19) Короткий чек‑лист «в бой»
+• MODEL_ID=google/embeddinggemma-300m (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• DTYPE=bf16|f32 (не fp16) (Источник: https://huggingface.co/google/embeddinggemma-300m)
+• EMBED_DIM=512, NORMALIZE=true, SIM=dot/IP (≡ cosine при нормализации) (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html , https://github.com/facebookresearch/faiss/issues/95)
+• Использовать encode_query / encode_document или строгие промпты (Источник: https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html , https://huggingface.co/google/embeddinggemma-300m)
+• QAT при нехватке памяти: Q8_0 (минимальный дроп) или Q4_0 (Источник: https://huggingface.co/google/embeddinggemma-300m)
+
+20) Список ключевых источников (быстрые ссылки)
+• HF модель и промпты, MRL/QAT таблицы, запрет fp16: https://huggingface.co/google/embeddinggemma-300m
+• Обзор Google (308M, <200MB с квантизацией, on‑device): https://developers.googleblog.com/en/introducing-embeddinggemma/
+• Обзор/спека EmbeddingGemma (Google AI Dev): https://ai.google.dev/gemma/docs/embeddinggemma
+• ST API (encode_query/document, normalize_embeddings, truncate_dim): https://sbert.net/docs/package_reference/sentence_transformer/SentenceTransformer.html
+• MRL/усечение в ST: https://sbert.net/examples/sentence_transformer/training/matryoshka/README.html
+• Рекомендация добавить «instructional prompt» для best embeddings: https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers
+• FAISS: IP по нормализованным векторам эквивалентен cosine: https://github.com/facebookresearch/faiss/issues/95
+• TEI (блог HF) + репозиторий: https://huggingface.co/blog/embeddinggemma , https://github.com/huggingface/text-embeddings-inference
+• Workers AI (Cloudflare) — модель: https://developers.cloudflare.com/workers-ai/models/embeddinggemma-300m/
+• LiteRT/AI Edge RAG сборки: https://huggingface.co/litert-community/embeddinggemma-300m
+
+──────────────────────────────────────────────────────────────────────────────
+Примечание: числа и формулировки взяты из официальных страниц на момент сентября 2025. Проверяйте актуальность при обновлениях.

@@ -18,11 +18,13 @@ use codex_tui::Cli as TuiCli;
 use std::path::PathBuf;
 
 mod audit_cmd;
+mod doc_cmd;
 mod mcp_cmd;
 mod orchestrator_cmd;
 mod pipeline_cmd;
 mod stellar_cmd;
 
+use crate::doc_cmd::DocCli;
 use crate::mcp_cmd::McpCli;
 use crate::orchestrator_cmd::OrchestratorCli;
 use crate::pipeline_cmd::PipelineCli;
@@ -85,6 +87,9 @@ enum Subcommand {
 
     /// Trusted pipeline management commands.
     Pipeline(PipelineCli),
+
+    /// Semantic documentation search helpers.
+    Doc(DocCli),
 
     /// Generate shell completion scripts.
     Completion(CompletionCommand),
@@ -270,6 +275,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         }
         Some(Subcommand::Pipeline(pipeline_cli)) => {
             pipeline_cmd::run(pipeline_cli)?;
+        }
+        Some(Subcommand::Doc(doc_cli)) => {
+            doc_cmd::run(doc_cli)?;
         }
         Some(Subcommand::Completion(completion_cli)) => {
             print_completion(completion_cli);

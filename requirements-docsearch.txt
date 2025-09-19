@@ -1,0 +1,8 @@
+# Минимальный набор зависимостей для EmbeddingGemma docsearch
+torch>=2.3.0
+sentence-transformers>=3.0.1
+numpy>=1.26
+urllib3>=2.0
+requests>=2.32
+
+rapidfuzz>=3.6

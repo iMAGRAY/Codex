@@ -53,3 +53,213 @@ Ship a feature-flagged MCP wizard and dashboard that meet these success criteria
 - App events for open/apply/reload/remove integrated with `McpRegistry` in `tui/src/app.rs`.
 - Snapshot test scaffolding for manager & wizard views added (pending `cargo insta accept`).
 - Health status stub exposed via `codex_core::mcp::health` and surfaced in manager list.
+
+- id: codex-gui-mvp
+  title: Codex Desktop GUI Shell MVP
+  type: feature
+  status: done
+  priority: P0
+  size_points: 13
+  scope_paths:
+    - path: codex-rs/gui
+    - path: codex-rs/Cargo.toml
+    - path: docs/codex-gui.md
+  spec:
+    given: CLI-only Codex interaction with REQ-UX-01 and REQ-ACC-01 still unmet for desktop shell
+    when: пользователь запускает бинарь `codex-gui` с включённым experimental десктопным режимом
+    then: окно в стиле белой минималистичной панели отображает историю, редактор и панель команд, проксируя действия в codex-core
+  budgets:
+    latency_ms_p95: 120
+    memory_mb_peak: 512
+  risks:
+    - gui-framework-learning-curve
+    - integration-regressions-across-platforms
+    - accessibility-parity-vs-tui
+  dependencies:
+    - codex-core-stable-api
+  tests_required:
+    - cargo test -p codex-gui
+    - cargo run -p codex-gui -- --smoke
+  verify_commands:
+    - cargo check -p codex-gui
+    - cargo test -p codex-gui
+  rollback:
+    commands:
+      - git revert <commit>
+  docs_updates:
+    - docs/codex-gui.md
+    - docs/stellar-quickstart.md
+  artifacts:
+    - codex-gui binary
+  audit:
+    created_at: 2025-09-19T00:00:00Z
+    created_by: GPT-5-codex
+    updated_at: 2025-09-19T00:30:00Z
+    updated_by: GPT-5-codex
+
+- id: codex-gui-ga
+  title: Codex Desktop GUI GA Readiness
+  type: feature
+  status: done
+  priority: P0
+  size_points: 21
+  scope_paths:
+    - path: codex-rs/gui
+    - path: codex-rs/core
+    - path: docs/codex-gui.md
+  spec:
+    given: Codex GUI использует моковый backend и не покрывает весь сценарий CLI/TUI
+    when: пользователь запускает десктопный клиент и входит под своей учётной записью
+    then: реализованы живые ответы Codex, команда/файловые операции, конфигурация и сохранение истории софта
+  budgets:
+    latency_ms_p95: 180
+    memory_mb_peak: 768
+  risks:
+    - async-runtime-integration
+    - cross-platform-windowing
+    - security-context-sharing
+  dependencies:
+    - codex-core session manager
+    - auth/oauth flow
+  tests_required:
+    - cargo test -p codex-gui
+    - cargo test -p codex-core conversation_manager::tests
+  verify_commands:
+    - cargo check -p codex-gui
+    - cargo run -p codex-gui -- --dry-run-ui
+  rollback:
+    commands:
+      - git revert <commit>
+  docs_updates:
+    - docs/codex-gui.md
+    - docs/stellar-quickstart.md
+  artifacts:
+    - codex-gui binary
+  audit:
+    created_at: 2025-09-19T01:00:00Z
+    created_by: GPT-5-codex
+    updated_at: 2025-09-19T02:30:00Z
+    updated_by: GPT-5-codex
+
+- id: codex-tui-file-explorer
+  title: Stellar TUI Explorer Panel
+  type: feature
+  status: done
+  priority: P0
+  size_points: 13
+  scope_paths:
+    - path: codex-rs/tui
+  spec:
+    given: Stellar TUI lacks a persistent project navigation surface (REQ-UX-01 from `docs/future/MaxThink-Stellar.md`)
+    when: оператор запускает `codex tui` в рабочем каталоге с файлами
+    then: слева отображается IDE-подобный файловый менеджер с возможностью навигации и предпросмотра
+  budgets:
+    latency_ms_p95: 80
+    memory_mb_peak: 128
+  risks:
+    - tree-scan-latency-on-large-repos
+    - focus-regression-between-panes
+  dependencies:
+    - codex-core session manager
+  tests_required:
+    - cargo test -p codex-tui
+  verify_commands:
+    - cargo check -p codex-tui
+    - cargo test -p codex-tui
+  rollback:
+    commands:
+      - git revert <commit>
+  docs_updates:
+    - docs/stellar-quickstart.md
+    - docs/future/stellar-tui-vision.md
+  artifacts:
+    - codex-tui binary
+  audit:
+    created_at: 2025-09-19T15:15:00Z
+    created_by: GPT-5-codex
+    updated_at: 2025-09-19T20:30:00Z
+    updated_by: GPT-5-codex
+
+- id: apply-patch-ux-revamp
+  title: Apply Patch Interactive UX Revamp
+  type: feature
+  status: blocked
+  blocked_reason: rustc aborts with ENOMEM inside sandbox; cannot run cargo fmt/test yet
+  blocked_recommendations:
+    - bump sandbox memory limit or rerun outside sandbox, then run `cargo fmt` and `cargo test -p codex-apply-patch`
+  priority: P0
+  size_points: 21
+  scope_paths:
+    - path: codex-rs/apply-patch/src
+    - path: codex-rs/apply-patch/tests
+    - path: codex-rs/apply-patch/apply_patch_tool_instructions.md
+  spec:
+    given: линейный apply_patch без интерактивности и гибкого контроля
+    when: оператор запускает обновлённый apply_patch в TTY окружении с патчем
+    then: инструмент предлагает предпросмотр, выбор хунков, dry-run и post-hook, сохраняя совместимость со скриптами
+  budgets:
+    latency_ms_p95: 120
+    memory_mb_peak: 64
+  risks:
+    - regression-in-noninteractive-workflows
+    - cross-platform-terminal-behavior
+    - partial-apply-state-drift
+  dependencies:
+    - codex-apply-patch-core
+  tests_required:
+    - cargo test -p codex-apply-patch
+  verify_commands:
+    - cargo test -p codex-apply-patch
+    - cargo fmt
+  rollback:
+    commands:
+      - git revert <commit>
+  docs_updates:
+    - codex-rs/apply-patch/apply_patch_tool_instructions.md
+  artifacts:
+    - apply_patch binary
+  audit:
+    created_at: 2025-09-19T16:00:00Z
+    created_by: GPT-5-codex
+    updated_at: 2025-09-19T17:45:00Z
+    updated_by: GPT-5-codex
+- id: codex-docsearch
+  title: Docsearch powered by EmbeddingGemma
+  type: tooling
+  status: done
+  priority: P1
+  size_points: 8
+  scope_paths:
+    - path: scripts/docsearch
+    - path: codex-rs/cli/src/doc_cmd.rs
+    - path: docs/getting-started.md
+  spec:
+    given: Агент тратит время на поиск по документации через grep
+    when: пользователь запускает `codex doc search`
+    then: выдаются релевантные чанки документации на основе EmbeddingGemma
+  budgets:
+    latency_ms_p95: 500
+    memory_mb_peak: 1024
+  risks:
+    - python-dependency-drift
+    - large-docs-footprint
+  dependencies:
+    - embeddinggemma-300m-model
+  tests_required:
+    - python -m scripts.docsearch.query --help
+  verify_commands:
+    - codex doc index --help
+    - codex doc search --help
+  rollback:
+    commands:
+      - git revert <commit>
+  docs_updates:
+    - docs/getting-started.md
+    - docs/codex-gui.md
+  artifacts:
+    - scripts/docsearch
+  audit:
+    created_at: 2025-09-19T03:10:00Z
+    created_by: GPT-5-codex
+    updated_at: 2025-09-19T03:10:00Z
+    updated_by: GPT-5-codex

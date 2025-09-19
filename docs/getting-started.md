@@ -7,6 +7,7 @@
 | `codex`            | Interactive TUI                    | `codex`                         |
 | `codex "..."`      | Initial prompt for interactive TUI | `codex "fix lint errors"`       |
 | `codex exec "..."` | Non-interactive "automation mode"  | `codex exec "explain utils.ts"` |
+| `codex doc search` | Semantic lookup in docs            | `codex doc search "how to login"` |
 
 Key flags: `--model/-m`, `--ask-for-approval/-a`.
 
@@ -75,6 +76,10 @@ For more information on how to use AGENTS.md, see the [official AGENTS.md docume
 
 Typing `@` triggers a fuzzy-filename search over the workspace root. Use up/down to select among the results and Tab or Enter to replace the `@` with the selected path. You can use Esc to cancel the search.
 
+#### MCP wizard file browser *(REQ-DX-01)*
+
+When the MCP manager or wizard is open, press `f` to launch the workspace-aware file browser. Use the arrow keys to navigate, `→` to enter directories, and `Enter` to select the highlighted path; this pre-fills the wizard's **Source path** field for automatic intake.
+
 #### Image input
 
 Paste images directly into the composer (Ctrl+V / Cmd+V) to attach them to your prompt. You can also attach files via the CLI using `-i/--image` (comma‑separated):
@@ -130,3 +135,26 @@ codex completion fish
 #### `--cd`/`-C` flag
 
 Sometimes it is not convenient to `cd` to the directory you want Codex to use as the "working root" before running Codex. Fortunately, `codex` supports a `--cd` option so you can specify whatever folder you want. You can confirm that Codex is honoring `--cd` by double-checking the **workdir** it reports in the TUI at the start of a new session.
+
+### Semantic documentation search
+
+To enable semantic search, install the lightweight Python dependencies once:
+
+```bash
+python -m pip install -r requirements-docsearch.txt
+```
+
+Index the docs (you can rerun when documentation changes):
+
+```bash
+codex doc index --docs-root docs --recursive
+```
+
+Query the index:
+
+```bash
+codex doc search "как аутентифицироваться" --show-text
+```
+
+Use `--model-path` if EmbeddingGemma is in a custom location, and `--truncate-dim` to switch between 768/512/256/128 Matryoshka profiles.
+
