@@ -2,6 +2,7 @@ use crate::app_backtrack::BacktrackState;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::chatwidget::ChatWidget;
+use crate::file_explorer::FileExplorerState;
 use crate::file_search::FileSearchManager;
 use crate::mcp::McpManagerEntry;
 use crate::mcp::McpManagerState;
@@ -40,12 +41,14 @@ use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 use crossterm::event::KeyModifiers;
 use crossterm::terminal::supports_keyboard_enhancement;
-use ratatui::style::Stylize;
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::Line;
 use std::collections::BTreeMap;
 use std::env;
+use std::fs;
+use std::io::{self, Read};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -56,6 +59,14 @@ use tokio::sync::mpsc::unbounded_channel;
 // use uuid::Uuid;
 
 use tracing::warn;
+
+const FILE_PREVIEW_LIMIT_BYTES: usize = 512 * 1024;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FocusTarget {
+    Chat,
+    Explorer,
+}
 
 pub(crate) struct App {
     pub(crate) server: Arc<ConversationManager>,
@@ -68,6 +79,7 @@ pub(crate) struct App {
     pub(crate) active_profile: Option<String>,
 
     pub(crate) file_search: FileSearchManager,
+    pub(crate) file_explorer: FileExplorerState,
 
     pub(crate) transcript_lines: Vec<Line<'static>>,
 
@@ -84,6 +96,8 @@ pub(crate) struct App {
     // Esc-backtracking state grouped
     pub(crate) backtrack: crate::app_backtrack::BacktrackState,
     pub(crate) stellar: StellarController,
+
+    focus: FocusTarget,
 }
 
 impl App {
@@ -148,6 +162,7 @@ impl App {
         };
 
         let file_search = FileSearchManager::new(config.cwd.clone(), app_event_tx.clone());
+        let file_explorer = FileExplorerState::new(config.cwd.clone());
 
         let mut app = Self {
             server: conversation_manager,
@@ -157,6 +172,7 @@ impl App {
             config,
             active_profile,
             file_search,
+            file_explorer,
             enhanced_keys_supported,
             transcript_lines: Vec::new(),
             overlay: None,
@@ -165,6 +181,7 @@ impl App {
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             backtrack: BacktrackState::default(),
             stellar: StellarController::new(StellarPersona::Operator),
+            focus: FocusTarget::Chat,
         };
 
         let tui_events = tui.event_stream();
@@ -214,38 +231,70 @@ impl App {
                     }
                     let terminal_size = tui.terminal.size()?;
                     let width = terminal_size.width;
+                    let explorer_width = self.explorer_panel_width(width);
+                    let separator_width: u16 = if explorer_width > 0 { 1 } else { 0 };
+                    let chat_width = width
+                        .saturating_sub(explorer_width + separator_width)
+                        .max(1);
                     let stellar_active = self.stellar.is_active();
                     if stellar_active {
-                        self.stellar.sync_layout(width);
+                        self.stellar.sync_layout(chat_width);
                     }
                     let stellar_snapshot = stellar_active.then(|| self.stellar.snapshot());
                     let stellar_height = if stellar_active {
-                        self.stellar.preferred_height().min(terminal_size.height)
+                        self.stellar
+                            .preferred_height()
+                            .min(terminal_size.height)
                     } else {
                         0
                     };
-                    let desired_height = self.chat_widget.desired_height(width) + stellar_height;
+                    let desired_height = self.chat_widget.desired_height(chat_width) + stellar_height;
                     tui.draw(desired_height, |frame| {
                         let area = frame.area();
+                        let explorer_width = self.explorer_panel_width(area.width);
+                        let separator_width: u16 = if explorer_width > 0 { 1 } else { 0 };
+                        let [explorer_area, separator_area, chat_container] =
+                            ratatui::layout::Layout::horizontal([
+                                ratatui::layout::Constraint::Length(explorer_width),
+                                ratatui::layout::Constraint::Length(separator_width),
+                                ratatui::layout::Constraint::Min(1),
+                            ])
+                            .areas(area);
+
+                        if explorer_width > 0 {
+                            frame.render_widget(
+                                self.file_explorer
+                                    .widget(self.focus == FocusTarget::Explorer),
+                                explorer_area,
+                            );
+                            if separator_width > 0 {
+                                Self::render_separator(separator_area, frame.buffer_mut());
+                            }
+                        }
+
                         if let Some(snapshot) = stellar_snapshot.as_ref() {
-                            let layout = ratatui::layout::Layout::default()
-                                .direction(ratatui::layout::Direction::Vertical)
-                                .constraints([
-                                    ratatui::layout::Constraint::Length(
-                                        stellar_height.min(area.height),
-                                    ),
-                                    ratatui::layout::Constraint::Min(1),
-                                ])
-                                .split(area);
+                            let layout = ratatui::layout::Layout::vertical([
+                                ratatui::layout::Constraint::Length(
+                                    stellar_height.min(chat_container.height),
+                                ),
+                                ratatui::layout::Constraint::Min(1),
+                            ])
+                            .areas(chat_container);
                             frame.render_widget(StellarView::new(snapshot), layout[0]);
                             frame.render_widget_ref(&self.chat_widget, layout[1]);
-                            if let Some((x, y)) = self.chat_widget.cursor_pos(layout[1]) {
-                                frame.set_cursor_position((x, y));
+                            if self.focus == FocusTarget::Chat {
+                                if let Some((x, y)) = self.chat_widget.cursor_pos(layout[1]) {
+                                    frame.set_cursor_position((x, y));
+                                }
                             }
                         } else {
-                            frame.render_widget_ref(&self.chat_widget, area);
-                            if let Some((x, y)) = self.chat_widget.cursor_pos(area) {
-                                frame.set_cursor_position((x, y));
+                            frame.render_widget_ref(&self.chat_widget, chat_container);
+                            if self.focus == FocusTarget::Chat {
+                                if let Some((x, y)) =
+                                    self.chat_widget.cursor_pos(chat_container)
+                                {
+                                    frame.set_cursor_position((x, y));
+                                }
                             }
                         }
                     })?;
@@ -268,6 +317,8 @@ impl App {
                     auth_manager: self.auth_manager.clone(),
                 };
                 self.chat_widget = ChatWidget::new(init, self.server.clone());
+                self.chat_widget
+                    .set_input_focus(self.focus == FocusTarget::Chat);
                 tui.frame_requester().schedule_frame();
             }
             AppEvent::InsertHistoryCell(cell) => {
@@ -351,6 +402,9 @@ impl App {
             }
             AppEvent::RemoveMcpServer { name } => {
                 self.remove_mcp_server(name)?;
+            }
+            AppEvent::OpenFilePath { path } => {
+                self.open_file_path(tui, path)?;
             }
             AppEvent::CodexOp(op) => self.chat_widget.submit_op(op),
             AppEvent::DiffResult(text) => {
@@ -468,7 +522,7 @@ impl App {
             .collect();
 
         self.chat_widget
-            .show_mcp_manager(entries, state.template_count);
+            .show_mcp_manager(entries, state.template_count, self.config.cwd.clone());
         Ok(())
     }
 
@@ -499,8 +553,12 @@ impl App {
             draft.name = sanitize_name(&id);
         }
 
-        self.chat_widget
-            .show_mcp_wizard(catalog, Some(draft), existing_name);
+        self.chat_widget.show_mcp_wizard(
+            catalog,
+            Some(draft),
+            existing_name,
+            self.config.cwd.clone(),
+        );
         Ok(())
     }
 
@@ -521,8 +579,12 @@ impl App {
             Err(err) => {
                 self.chat_widget
                     .add_error_message(format!("Failed to validate MCP server: {err}"));
-                self.chat_widget
-                    .show_mcp_wizard(catalog, Some(retry_draft), existing_name);
+                self.chat_widget.show_mcp_wizard(
+                    catalog,
+                    Some(retry_draft),
+                    existing_name,
+                    self.config.cwd.clone(),
+                );
                 return Ok(());
             }
         };
@@ -589,6 +651,302 @@ impl App {
         Ok(())
     }
 
+    fn open_file_path(&mut self, tui: &mut tui::Tui, path: PathBuf) -> Result<()> {
+        let metadata = match fs::metadata(&path) {
+            Ok(meta) => meta,
+            Err(err) => {
+                self.chat_widget.add_error_message(format!(
+                    "Failed to open {}: {err}",
+                    path.display()
+                ));
+                return Ok(());
+            }
+        };
+
+        if metadata.is_dir() {
+            // Directory navigation is handled by the explorer pane state.
+            return Ok(());
+        }
+
+        match Self::preview_lines_for_path(&path) {
+            Ok(lines) => {
+                let title = path
+                    .strip_prefix(&self.config.cwd)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| path.display().to_string());
+                self.overlay = Some(Overlay::new_static_with_title(lines, title));
+                tui.frame_requester().schedule_frame();
+            }
+            Err(err) => {
+                self.chat_widget.add_error_message(format!(
+                    "Failed to preview {}: {err}",
+                    path.display()
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn preview_lines_for_path(path: &Path) -> io::Result<Vec<Line<'static>>> {
+        let mut file = fs::File::open(path)?;
+        let mut buffer = Vec::with_capacity(FILE_PREVIEW_LIMIT_BYTES + 1);
+        {
+            let mut limited = file.by_ref().take((FILE_PREVIEW_LIMIT_BYTES + 1) as u64);
+            limited.read_to_end(&mut buffer)?;
+        }
+
+        let mut truncated = false;
+        if buffer.len() > FILE_PREVIEW_LIMIT_BYTES {
+            buffer.truncate(FILE_PREVIEW_LIMIT_BYTES);
+            truncated = true;
+        } else {
+            let mut probe = [0u8; 1];
+            truncated = file.read(&mut probe)? > 0;
+        }
+
+        if buffer.is_empty() {
+            let mut lines = Vec::new();
+            lines.push(Line::from("(empty file)".to_string()).dim());
+            return Ok(lines);
+        }
+
+        match String::from_utf8(buffer) {
+            Ok(text) => {
+                let mut lines: Vec<Line<'static>> = text
+                    .lines()
+                    .map(|line| {
+                        let cleaned = line.trim_end_matches('\r').to_string();
+                        Line::from(cleaned)
+                    })
+                    .collect();
+                if text.ends_with('\n') {
+                    lines.push(Line::from(String::new()));
+                }
+                if lines.is_empty() {
+                    lines.push(Line::from("(empty file)".to_string()).dim());
+                }
+                if truncated {
+                    lines.push(Self::truncated_line());
+                }
+                Ok(lines)
+            }
+            Err(_) => {
+                let mut lines = vec![Line::from("Binary preview not available".to_string()).italic().dim()];
+                if truncated {
+                    lines.push(Self::truncated_line());
+                }
+                Ok(lines)
+            }
+        }
+    }
+
+    fn truncated_line() -> Line<'static> {
+        Line::from(format!(
+            "… (preview truncated at {} KB)",
+            FILE_PREVIEW_LIMIT_BYTES / 1024
+        ))
+        .dim()
+    }
+
+    fn explorer_panel_width(&self, total_width: u16) -> u16 {
+        const MIN_TOTAL: u16 = 70;
+        const MIN_WIDTH: u16 = 22;
+        const MAX_WIDTH: u16 = 42;
+        const MIN_CHAT_WIDTH: u16 = 48;
+
+        if total_width < MIN_TOTAL {
+            return 0;
+        }
+
+        let max_allowed = total_width.saturating_sub(MIN_CHAT_WIDTH);
+        if max_allowed < MIN_WIDTH {
+            return 0;
+        }
+
+        let ideal = (total_width as f32 * 0.28).round() as u16;
+        ideal.clamp(MIN_WIDTH, MAX_WIDTH).min(max_allowed)
+    }
+
+    fn render_separator(area: ratatui::layout::Rect, buf: &mut ratatui::buffer::Buffer) {
+        if area.width == 0 {
+            return;
+        }
+        for y in area.y..area.bottom() {
+            buf.set_stringn(area.x, y, "│", 1, Style::default().fg(Color::DarkGray));
+        }
+    }
+
+    fn focus_chat(&mut self) {
+        if self.focus != FocusTarget::Chat {
+            self.focus = FocusTarget::Chat;
+            self.chat_widget.set_input_focus(true);
+        }
+    }
+
+    fn focus_explorer(&mut self) {
+        if self.focus != FocusTarget::Explorer {
+            self.focus = FocusTarget::Explorer;
+            self.chat_widget.set_input_focus(false);
+        }
+    }
+
+    fn handle_file_explorer_key(&mut self, tui: &mut tui::Tui, key_event: &KeyEvent) -> bool {
+        if matches!(key_event.code, KeyCode::F(2))
+            && matches!(key_event.kind, KeyEventKind::Press)
+        {
+            if self.focus == FocusTarget::Explorer {
+                self.focus_chat();
+            } else {
+                self.focus_explorer();
+            }
+            tui.frame_requester().schedule_frame();
+            return true;
+        }
+
+        if self.focus != FocusTarget::Explorer {
+            return false;
+        }
+
+        match key_event.code {
+            KeyCode::Esc | KeyCode::Tab => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    self.focus_chat();
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Up => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    self.file_explorer.move_selection(-1);
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Down => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    self.file_explorer.move_selection(1);
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::PageUp => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    self.file_explorer.move_selection(-10);
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::PageDown => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    self.file_explorer.move_selection(10);
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Home => {
+                if matches!(key_event.kind, KeyEventKind::Press) {
+                    self.file_explorer.select_first();
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::End => {
+                if matches!(key_event.kind, KeyEventKind::Press) {
+                    self.file_explorer.select_last();
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Left => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    if let Err(err) = self.file_explorer.collapse_selected() {
+                        warn!(error = %err, "file explorer collapse failed");
+                    }
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Right => {
+                if matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                    if let Some(entry) = self.file_explorer.selected_entry().cloned() {
+                        if entry.is_placeholder {
+                            // no-op placeholder row (ellipsis)
+                        } else if entry.is_dir {
+                            if entry.is_expanded {
+                                let idx = self.file_explorer.selected_index();
+                                if let Some(next) = self
+                                    .file_explorer
+                                    .visible_items()
+                                    .get(idx.saturating_add(1))
+                                {
+                                    if next.depth > entry.depth {
+                                        self.file_explorer.move_selection(1);
+                                    }
+                                }
+                            } else if let Err(err) = self.file_explorer.expand_selected() {
+                                warn!(error = %err, "file explorer expand failed");
+                            }
+                        } else {
+                            self.open_selected_path_from_explorer(tui);
+                        }
+                    }
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Char(' ') => {
+                if matches!(key_event.kind, KeyEventKind::Press) {
+                    if let Err(err) = self.file_explorer.toggle_expanded() {
+                        warn!(error = %err, "file explorer toggle failed");
+                    }
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Enter => {
+                if matches!(key_event.kind, KeyEventKind::Press) {
+                    if let Some(entry) = self.file_explorer.selected_entry().cloned() {
+                        if entry.is_placeholder {
+                            // ignore placeholder rows
+                        } else if entry.is_dir {
+                            if let Err(err) = self.file_explorer.toggle_expanded() {
+                                warn!(error = %err, "file explorer toggle failed");
+                            }
+                        } else {
+                            self.open_selected_path_from_explorer(tui);
+                        }
+                    }
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            KeyCode::Char('r') => {
+                if key_event.modifiers.contains(KeyModifiers::CONTROL)
+                    && matches!(key_event.kind, KeyEventKind::Press)
+                {
+                    if let Err(err) = self.file_explorer.refresh() {
+                        warn!(error = %err, "file explorer refresh failed");
+                    }
+                    tui.frame_requester().schedule_frame();
+                    return true;
+                }
+            }
+            _ => {}
+        }
+
+        false
+    }
+
+    fn open_selected_path_from_explorer(&mut self, tui: &mut tui::Tui) {
+        if let Some(path) = self.file_explorer.selected_path() {
+            if let Err(err) = self.open_file_path(tui, path) {
+                self.chat_widget
+                    .add_error_message(format!("Failed to open file: {err}"));
+            }
+        }
+    }
+
     fn load_template_catalog(&self) -> TemplateCatalog {
         TemplateCatalog::load_default().unwrap_or_else(|err| {
             warn!(error = %err, "Failed to load MCP templates");
@@ -614,11 +972,16 @@ impl App {
             key_event,
             KeyEvent {
                 code: KeyCode::Char('?'),
+                modifiers,
                 kind: KeyEventKind::Press | KeyEventKind::Repeat,
                 ..
-            }
+            } if modifiers.contains(KeyModifiers::CONTROL)
         ) {
             self.open_quickstart_overlay(tui);
+            return;
+        }
+
+        if self.handle_file_explorer_key(tui, &key_event) {
             return;
         }
 
@@ -765,6 +1128,7 @@ mod tests {
     use super::*;
     use crate::app_backtrack::BacktrackState;
     use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
+    use crate::file_explorer::FileExplorerState;
     use crate::file_search::FileSearchManager;
     use codex_core::AuthManager;
     use codex_core::CodexAuth;
@@ -784,6 +1148,7 @@ mod tests {
         let auth_manager =
             AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
         let file_search = FileSearchManager::new(config.cwd.clone(), app_event_tx.clone());
+        let file_explorer = FileExplorerState::new(config.cwd.clone());
 
         App {
             server,
@@ -793,6 +1158,7 @@ mod tests {
             config,
             active_profile: None,
             file_search,
+            file_explorer,
             transcript_lines: Vec::<Line<'static>>::new(),
             overlay: None,
             deferred_history_lines: Vec::new(),
@@ -801,6 +1167,7 @@ mod tests {
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             backtrack: BacktrackState::default(),
             stellar: StellarController::new(StellarPersona::Operator),
+            focus: FocusTarget::Chat,
         }
     }
 

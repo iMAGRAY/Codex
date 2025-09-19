@@ -78,10 +78,11 @@ pub(crate) async fn handle_update_plan(
                     success: Some(true),
                 },
             };
+            session.record_plan_update(&args);
             session
                 .send_event(Event {
                     id: sub_id.to_string(),
-                    msg: EventMsg::PlanUpdate(args),
+                    msg: EventMsg::PlanUpdate(args.clone()),
                 })
                 .await;
             output

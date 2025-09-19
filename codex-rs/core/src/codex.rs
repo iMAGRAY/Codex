@@ -77,6 +77,7 @@ use crate::openai_tools::ToolsConfig;
 use crate::openai_tools::ToolsConfigParams;
 use crate::openai_tools::get_openai_tools;
 use crate::parse_command::parse_command;
+use crate::plan_tool::UpdatePlanArgs;
 use crate::plan_tool::handle_update_plan;
 use crate::project_doc::get_user_instructions;
 use crate::protocol::AgentMessageDeltaEvent;
@@ -132,8 +133,14 @@ use codex_protocol::models::ShellToolCallParams;
 use codex_protocol::protocol::InitialHistory;
 
 mod compact;
+use self::compact::HistoryBridgeContext;
 use self::compact::build_compacted_history;
+use self::compact::build_repo_outline;
+use self::compact::build_session_snapshot;
 use self::compact::collect_user_messages;
+use self::compact::extract_initial_context_sections;
+use self::compact::format_plan_overview;
+use self::compact::sanitize_inline;
 
 // A convenience extension trait for acquiring mutex locks where poisoning is
 // unrecoverable and should abort the program. This avoids scattered `.unwrap()`
@@ -273,6 +280,7 @@ struct State {
     history: ConversationHistory,
     token_info: Option<TokenUsageInfo>,
     next_internal_sub_id: u64,
+    plan: Option<UpdatePlanArgs>,
 }
 
 /// Context for an initialized model agent
@@ -697,10 +705,32 @@ impl Session {
                 RolloutItem::Compacted(compacted) => {
                     let snapshot = history.contents();
                     let user_messages = collect_user_messages(&snapshot);
+                    let initial_context_items = self.build_initial_context(turn_context);
+                    let initial_sections = extract_initial_context_sections(&initial_context_items);
+                    let plan_snapshot = self.plan_snapshot();
+                    let plan_text = plan_snapshot.as_ref().map(format_plan_overview);
+                    let repo_outline = build_repo_outline(&turn_context.cwd);
+                    let session_context_text = build_session_snapshot(turn_context);
+                    let session_context_ref = (!session_context_text.trim().is_empty())
+                        .then_some(session_context_text.as_str());
+                    let bridge_context = HistoryBridgeContext {
+                        user_instructions_text: initial_sections
+                            .user_instructions
+                            .as_deref()
+                            .map(sanitize_inline),
+                        environment_context_text: initial_sections
+                            .environment_context
+                            .as_deref()
+                            .map(sanitize_inline),
+                        plan_text: plan_text.as_deref().map(sanitize_inline),
+                        repo_outline_text: repo_outline.as_deref().map(sanitize_inline),
+                        session_context_text: session_context_ref.map(sanitize_inline),
+                    };
                     let rebuilt = build_compacted_history(
-                        self.build_initial_context(turn_context),
+                        initial_context_items,
                         &user_messages,
                         &compacted.message,
+                        bridge_context,
                     );
                     history.replace(rebuilt);
                 }
@@ -789,6 +819,15 @@ impl Session {
         if !user_msgs.is_empty() {
             self.persist_rollout_items(&user_msgs).await;
         }
+    }
+
+    pub(crate) fn record_plan_update(&self, update: &UpdatePlanArgs) {
+        let mut state = self.state.lock_unchecked();
+        state.plan = Some(update.clone());
+    }
+
+    pub(crate) fn plan_snapshot(&self) -> Option<UpdatePlanArgs> {
+        self.state.lock_unchecked().plan.clone()
     }
 
     async fn on_exec_command_begin(
@@ -3651,11 +3690,28 @@ mod tests {
         let summary1 = "summary one";
         let snapshot1 = live_history.contents();
         let user_messages1 = collect_user_messages(&snapshot1);
-        let rebuilt1 = build_compacted_history(
-            session.build_initial_context(turn_context),
-            &user_messages1,
-            summary1,
-        );
+        let initial_context1 = session.build_initial_context(turn_context);
+        let initial_sections1 = extract_initial_context_sections(&initial_context1);
+        let plan_text1 = session.plan_snapshot().as_ref().map(format_plan_overview);
+        let repo_outline1 = build_repo_outline(&turn_context.cwd);
+        let session_context_text1 = build_session_snapshot(turn_context);
+        let session_context_ref1 =
+            (!session_context_text1.trim().is_empty()).then_some(session_context_text1.as_str());
+        let bridge_context1 = HistoryBridgeContext {
+            user_instructions_text: initial_sections1
+                .user_instructions
+                .as_deref()
+                .map(sanitize_inline),
+            environment_context_text: initial_sections1
+                .environment_context
+                .as_deref()
+                .map(sanitize_inline),
+            plan_text: plan_text1.as_deref().map(sanitize_inline),
+            repo_outline_text: repo_outline1.as_deref().map(sanitize_inline),
+            session_context_text: session_context_ref1.map(sanitize_inline),
+        };
+        let rebuilt1 =
+            build_compacted_history(initial_context1, &user_messages1, summary1, bridge_context1);
         live_history.replace(rebuilt1);
         rollout_items.push(RolloutItem::Compacted(CompactedItem {
             message: summary1.to_string(),
@@ -3684,11 +3740,28 @@ mod tests {
         let summary2 = "summary two";
         let snapshot2 = live_history.contents();
         let user_messages2 = collect_user_messages(&snapshot2);
-        let rebuilt2 = build_compacted_history(
-            session.build_initial_context(turn_context),
-            &user_messages2,
-            summary2,
-        );
+        let initial_context2 = session.build_initial_context(turn_context);
+        let initial_sections2 = extract_initial_context_sections(&initial_context2);
+        let plan_text2 = session.plan_snapshot().as_ref().map(format_plan_overview);
+        let repo_outline2 = build_repo_outline(&turn_context.cwd);
+        let session_context_text2 = build_session_snapshot(turn_context);
+        let session_context_ref2 =
+            (!session_context_text2.trim().is_empty()).then_some(session_context_text2.as_str());
+        let bridge_context2 = HistoryBridgeContext {
+            user_instructions_text: initial_sections2
+                .user_instructions
+                .as_deref()
+                .map(sanitize_inline),
+            environment_context_text: initial_sections2
+                .environment_context
+                .as_deref()
+                .map(sanitize_inline),
+            plan_text: plan_text2.as_deref().map(sanitize_inline),
+            repo_outline_text: repo_outline2.as_deref().map(sanitize_inline),
+            session_context_text: session_context_ref2.map(sanitize_inline),
+        };
+        let rebuilt2 =
+            build_compacted_history(initial_context2, &user_messages2, summary2, bridge_context2);
         live_history.replace(rebuilt2);
         rollout_items.push(RolloutItem::Compacted(CompactedItem {
             message: summary2.to_string(),

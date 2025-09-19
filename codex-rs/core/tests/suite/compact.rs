@@ -129,6 +129,7 @@ async fn start_mock_server() -> MockServer {
 pub(super) const FIRST_REPLY: &str = "FIRST_REPLY";
 pub(super) const SUMMARY_TEXT: &str = "SUMMARY_ONLY_CONTEXT";
 pub(super) const SUMMARIZE_TRIGGER: &str = "Start Summarization";
+const SUMMARIZATION_PROMPT_PREFIX: &str = "You are preparing the `/compact` checkpoint";
 const THIRD_USER_MSG: &str = "next turn";
 const AUTO_SUMMARY_TEXT: &str = "AUTO_SUMMARY";
 const FIRST_AUTO_MSG: &str = "token limit start";
@@ -252,7 +253,7 @@ async fn summarize_context_three_requests_and_instructions() {
         "summarization should override base instructions"
     );
     assert!(
-        instr2.contains("You have exceeded the maximum number of tokens"),
+        instr2.contains(SUMMARIZATION_PROMPT_PREFIX),
         "summarization instructions not applied"
     );
 
@@ -298,22 +299,17 @@ async fn summarize_context_three_requests_and_instructions() {
             .any(|(r, t)| r == "user" && t == THIRD_USER_MSG),
         "third request should include the new user message"
     );
-    let Some((_, bridge_text)) = messages.iter().find(|(role, text)| {
-        role == "user"
-            && (text.contains("Here were the user messages")
-                || text.contains("Here are all the user messages"))
-            && text.contains(SUMMARY_TEXT)
-    }) else {
-        panic!("expected a bridge message containing the summary");
+    let Some((_, bridge_text)) = messages
+        .iter()
+        .find(|(role, text)| role == "user" && text.starts_with("MEMORY_ARCHIVE\n"))
+    else {
+        panic!("expected a compact bridge message");
     };
-    assert!(
-        bridge_text.contains("hello world"),
-        "bridge should capture earlier user messages"
-    );
-    assert!(
-        !bridge_text.contains(SUMMARIZE_TRIGGER),
-        "bridge text should not echo the summarize trigger"
-    );
+    assert!(bridge_text.contains(&format!("PAST.SUMMARY={SUMMARY_TEXT}")));
+    assert!(bridge_text.contains("PAST.PLAN="));
+    assert!(bridge_text.contains("PAST.REPO="));
+    assert!(bridge_text.contains("PAST.MESSAGES=TURN1:hello world"));
+    assert!(!bridge_text.contains(SUMMARIZE_TRIGGER));
     assert!(
         !messages
             .iter()
@@ -398,7 +394,7 @@ async fn auto_compact_runs_after_token_limit_hit() {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
         body.contains(FIRST_AUTO_MSG)
             && !body.contains(SECOND_AUTO_MSG)
-            && !body.contains("You have exceeded the maximum number of tokens")
+            && !body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -411,7 +407,7 @@ async fn auto_compact_runs_after_token_limit_hit() {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
         body.contains(SECOND_AUTO_MSG)
             && body.contains(FIRST_AUTO_MSG)
-            && !body.contains("You have exceeded the maximum number of tokens")
+            && !body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -422,7 +418,7 @@ async fn auto_compact_runs_after_token_limit_hit() {
 
     let third_matcher = |req: &wiremock::Request| {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
-        body.contains("You have exceeded the maximum number of tokens")
+        body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -479,7 +475,7 @@ async fn auto_compact_runs_after_token_limit_hit() {
     let is_auto_compact = |req: &wiremock::Request| {
         std::str::from_utf8(&req.body)
             .unwrap_or("")
-            .contains("You have exceeded the maximum number of tokens")
+            .contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     let auto_compact_count = requests.iter().filter(|req| is_auto_compact(req)).count();
     assert_eq!(
@@ -504,7 +500,7 @@ async fn auto_compact_runs_after_token_limit_hit() {
         .and_then(|v| v.as_str())
         .unwrap_or_default();
     assert!(
-        instructions.contains("You have exceeded the maximum number of tokens"),
+        instructions.contains(SUMMARIZATION_PROMPT_PREFIX),
         "auto compact should reuse summarization instructions"
     );
 }
@@ -539,7 +535,7 @@ async fn auto_compact_persists_rollout_entries() {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
         body.contains(FIRST_AUTO_MSG)
             && !body.contains(SECOND_AUTO_MSG)
-            && !body.contains("You have exceeded the maximum number of tokens")
+            && !body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -552,7 +548,7 @@ async fn auto_compact_persists_rollout_entries() {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
         body.contains(SECOND_AUTO_MSG)
             && body.contains(FIRST_AUTO_MSG)
-            && !body.contains("You have exceeded the maximum number of tokens")
+            && !body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -563,7 +559,7 @@ async fn auto_compact_persists_rollout_entries() {
 
     let third_matcher = |req: &wiremock::Request| {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
-        body.contains("You have exceeded the maximum number of tokens")
+        body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -670,8 +666,7 @@ async fn auto_compact_stops_after_failed_attempt() {
 
     let first_matcher = |req: &wiremock::Request| {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
-        body.contains(FIRST_AUTO_MSG)
-            && !body.contains("You have exceeded the maximum number of tokens")
+        body.contains(FIRST_AUTO_MSG) && !body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -682,7 +677,7 @@ async fn auto_compact_stops_after_failed_attempt() {
 
     let second_matcher = |req: &wiremock::Request| {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
-        body.contains("You have exceeded the maximum number of tokens")
+        body.contains(SUMMARIZATION_PROMPT_PREFIX)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -693,8 +688,7 @@ async fn auto_compact_stops_after_failed_attempt() {
 
     let third_matcher = |req: &wiremock::Request| {
         let body = std::str::from_utf8(&req.body).unwrap_or("");
-        !body.contains("You have exceeded the maximum number of tokens")
-            && body.contains(SUMMARY_TEXT)
+        !body.contains(SUMMARIZATION_PROMPT_PREFIX) && body.contains(SUMMARY_TEXT)
     };
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -751,7 +745,7 @@ async fn auto_compact_stops_after_failed_attempt() {
         .and_then(|v| v.as_str())
         .unwrap_or_default();
     assert!(
-        !instructions.contains("You have exceeded the maximum number of tokens"),
+        !instructions.contains(SUMMARIZATION_PROMPT_PREFIX),
         "third request should be the follow-up turn, not another summarization"
     );
 }
@@ -885,7 +879,7 @@ async fn auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_
         "first request should contain the user input"
     );
     assert!(
-        request_bodies[1].contains("You have exceeded the maximum number of tokens"),
+        request_bodies[1].contains(SUMMARIZATION_PROMPT_PREFIX),
         "first auto compact request should use summarization instructions"
     );
     assert!(
@@ -893,7 +887,7 @@ async fn auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_
         "function call output should be sent before the second auto compact"
     );
     assert!(
-        request_bodies[4].contains("You have exceeded the maximum number of tokens"),
+        request_bodies[4].contains(SUMMARIZATION_PROMPT_PREFIX),
         "second auto compact request should reuse summarization instructions"
     );
 }

@@ -12,6 +12,7 @@ use codex_core::ReasoningItemContent;
 use codex_core::ResponseEvent;
 use codex_core::ResponseItem;
 use codex_core::WireApi;
+use codex_core::auth::get_auth_file;
 use codex_core::built_in_model_providers;
 use codex_core::protocol::EventMsg;
 use codex_core::protocol::InputItem;
@@ -114,8 +115,9 @@ fn write_auth_json(
         "last_refresh": chrono::Utc::now(),
     });
 
+    let auth_path = get_auth_file(codex_home.path());
     std::fs::write(
-        codex_home.path().join("auth.json"),
+        &auth_path,
         serde_json::to_string_pretty(&auth_json).unwrap(),
     )
     .unwrap();

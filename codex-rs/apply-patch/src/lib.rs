@@ -1,8 +1,11 @@
+pub(crate) mod cli;
+pub(crate) mod history;
+pub(crate) mod interactive;
 mod parser;
 mod seek_sequence;
 mod standalone_executable;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -10,10 +13,11 @@ use std::str::Utf8Error;
 use anyhow::Context;
 use anyhow::Result;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 pub use parser::Hunk;
 pub use parser::ParseError;
 use parser::ParseError::*;
-use parser::UpdateFileChunk;
+pub use parser::UpdateFileChunk;
 pub use parser::parse_patch;
 use similar::TextDiff;
 use thiserror::Error;
@@ -123,7 +127,7 @@ pub fn maybe_parse_apply_patch(argv: &[String]) -> MaybeApplyPatch {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ApplyPatchFileChange {
     Add {
         content: String,
@@ -134,9 +138,183 @@ pub enum ApplyPatchFileChange {
     Update {
         unified_diff: String,
         move_path: Option<PathBuf>,
+        /// original file contents before applying the patch.
+        original_content: String,
         /// new_content that will result after the unified_diff is applied.
         new_content: String,
     },
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Selection {
+    ApplyAll,
+    SkipAll,
+    Explicit(Vec<SelectionEntry>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SelectionEntry {
+    EntireHunk { hunk_index: usize },
+    UpdateChunk { hunk_index: usize, chunk_index: usize },
+}
+
+impl SelectionEntry {
+    pub fn hunk_index(&self) -> usize {
+        match self {
+            SelectionEntry::EntireHunk { hunk_index } => *hunk_index,
+            SelectionEntry::UpdateChunk { hunk_index, .. } => *hunk_index,
+        }
+    }
+}
+
+pub fn filter_hunks_by_selection(hunks: &[Hunk], selection: &Selection) -> Vec<Hunk> {
+    match selection {
+        Selection::ApplyAll => hunks.to_vec(),
+        Selection::SkipAll => Vec::new(),
+        Selection::Explicit(entries) => {
+            let mut by_hunk: BTreeMap<usize, Vec<&SelectionEntry>> = BTreeMap::new();
+            for entry in entries {
+                by_hunk.entry(entry.hunk_index()).or_default().push(entry);
+            }
+
+            let mut selected = Vec::new();
+            for (index, hunk) in hunks.iter().enumerate() {
+                if let Some(decisions) = by_hunk.get(&index) {
+                    let apply_entire = decisions
+                        .iter()
+                        .any(|entry| matches!(entry, SelectionEntry::EntireHunk { .. }));
+                    if apply_entire {
+                        selected.push(hunk.clone());
+                        continue;
+                    }
+
+                    if let Hunk::UpdateFile { path, move_path, chunks } = hunk {
+                        let mut chunk_indices = BTreeSet::new();
+                        for entry in decisions {
+                            if let SelectionEntry::UpdateChunk { chunk_index, .. } = entry {
+                                chunk_indices.insert(*chunk_index);
+                            }
+                        }
+
+                        if !chunk_indices.is_empty() {
+                            let mut chosen_chunks = Vec::new();
+                            for idx in chunk_indices {
+                                if let Some(chunk) = chunks.get(idx) {
+                                    chosen_chunks.push(chunk.clone());
+                                }
+                            }
+                            if !chosen_chunks.is_empty() {
+                                selected.push(Hunk::UpdateFile {
+                                    path: path.clone(),
+                                    move_path: move_path.clone(),
+                                    chunks: chosen_chunks,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            selected
+        }
+    }
+}
+
+pub fn render_patch_from_hunks(hunks: &[Hunk]) -> String {
+    let mut patch = String::new();
+    patch.push_str("*** Begin Patch\n");
+    for hunk in hunks {
+        match hunk {
+            Hunk::AddFile { path, contents } => {
+                patch.push_str("*** Add File: ");
+                patch.push_str(&path.to_string_lossy());
+                patch.push('\n');
+                for line in contents.lines() {
+                    patch.push('+');
+                    patch.push_str(line);
+                    patch.push('\n');
+                }
+            }
+            Hunk::DeleteFile { path } => {
+                patch.push_str("*** Delete File: ");
+                patch.push_str(&path.to_string_lossy());
+                patch.push('\n');
+            }
+            Hunk::UpdateFile { path, move_path, chunks } => {
+                patch.push_str("*** Update File: ");
+                patch.push_str(&path.to_string_lossy());
+                patch.push('\n');
+                if let Some(dest) = move_path {
+                    patch.push_str("*** Move to: ");
+                    patch.push_str(&dest.to_string_lossy());
+                    patch.push('\n');
+                }
+                for chunk in chunks {
+                    if let Some(ctx) = &chunk.change_context {
+                        patch.push_str("@@ ");
+                        patch.push_str(ctx);
+                        patch.push('\n');
+                    } else {
+                        patch.push_str("@@\n");
+                    }
+                    for line in &chunk.old_lines {
+                        patch.push('-');
+                        patch.push_str(line);
+                        patch.push('\n');
+                    }
+                    for line in &chunk.new_lines {
+                        patch.push('+');
+                        patch.push_str(line);
+                        patch.push('\n');
+                    }
+                    if chunk.is_end_of_file {
+                        patch.push_str("*** End of File\n");
+                    }
+                }
+            }
+        }
+    }
+    patch.push_str("*** End Patch\n");
+    patch
+}
+
+pub fn action_from_hunks(hunks: &[Hunk], cwd: &Path) -> Result<ApplyPatchAction, ApplyPatchError> {
+    let patch = render_patch_from_hunks(hunks);
+    let argv = vec!["apply_patch".to_string(), patch];
+    match maybe_parse_apply_patch_verified(&argv, cwd) {
+        MaybeApplyPatchVerified::Body(action) => Ok(action),
+        MaybeApplyPatchVerified::CorrectnessError(err) => Err(err),
+        MaybeApplyPatchVerified::ShellParseError(err) => Err(ApplyPatchError::ComputeReplacements(format!(
+            "Failed to compute patch action: {:?}",
+            err
+        ))),
+        MaybeApplyPatchVerified::NotApplyPatch => Err(ApplyPatchError::ComputeReplacements(
+            "Rendered patch was not recognized as apply_patch".to_string(),
+        )),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedPatch {
+    pub hunks: Vec<Hunk>,
+    pub action: ApplyPatchAction,
+}
+
+pub fn build_selected_patch(
+    hunks: &[Hunk],
+    selection: &Selection,
+    cwd: &Path,
+) -> Result<Option<SelectedPatch>, ApplyPatchError> {
+    let chosen = filter_hunks_by_selection(hunks, selection);
+    if chosen.is_empty() {
+        return Ok(None);
+    }
+    let action = action_from_hunks(&chosen, cwd)?;
+    Ok(Some(SelectedPatch {
+        hunks: chosen,
+        action,
+    }))
 }
 
 #[derive(Debug, PartialEq)]
@@ -156,9 +334,13 @@ pub enum MaybeApplyPatchVerified {
 
 /// ApplyPatchAction is the result of parsing an `apply_patch` command. By
 /// construction, all paths should be absolute paths.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ApplyPatchAction {
     changes: HashMap<PathBuf, ApplyPatchFileChange>,
+
+    /// The hunks parsed from the patch string in their original order. Relative paths
+    /// remain relative; use `resolve_path` when mapping to the filesystem.
+    pub hunks: Vec<Hunk>,
 
     /// The raw patch argument that can be used with `apply_patch` as an exec
     /// call. i.e., if the original arg was parsed in "lenient" mode with a
@@ -190,18 +372,24 @@ impl ApplyPatchAction {
         let filename = path
             .file_name()
             .expect("path should not be empty")
-            .to_string_lossy();
+            .to_string_lossy()
+            .into_owned();
         let patch = format!(
             r#"*** Begin Patch
 *** Update File: {filename}
 @@
 + {content}
 *** End Patch"#,
+            filename = filename,
+            content = content
         );
-        let changes = HashMap::from([(path.to_path_buf(), ApplyPatchFileChange::Add { content })]);
-        #[expect(clippy::expect_used)]
+        let changes = HashMap::from([(path.to_path_buf(), ApplyPatchFileChange::Add { content: content.clone() })]);
         Self {
             changes,
+            hunks: vec![Hunk::AddFile {
+                path: PathBuf::from(&filename),
+                contents: content,
+            }],
             cwd: path
                 .parent()
                 .expect("path should have parent")
@@ -252,11 +440,12 @@ pub fn maybe_parse_apply_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
                 })
                 .unwrap_or_else(|| cwd.to_path_buf());
             let mut changes = HashMap::new();
-            for hunk in hunks {
+            let hunks_vec = hunks;
+            for hunk in hunks_vec.iter() {
                 let path = hunk.resolve_path(&effective_cwd);
                 match hunk {
                     Hunk::AddFile { contents, .. } => {
-                        changes.insert(path, ApplyPatchFileChange::Add { content: contents });
+                        changes.insert(path, ApplyPatchFileChange::Add { content: contents.clone() });
                     }
                     Hunk::DeleteFile { .. } => {
                         let content = match std::fs::read_to_string(&path) {
@@ -277,8 +466,9 @@ pub fn maybe_parse_apply_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
                     } => {
                         let ApplyPatchFileUpdate {
                             unified_diff,
+                            original_content,
                             content: contents,
-                        } = match unified_diff_from_chunks(&path, &chunks) {
+                        } = match unified_diff_from_chunks(&path, chunks) {
                             Ok(diff) => diff,
                             Err(e) => {
                                 return MaybeApplyPatchVerified::CorrectnessError(e);
@@ -288,7 +478,8 @@ pub fn maybe_parse_apply_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
                             path,
                             ApplyPatchFileChange::Update {
                                 unified_diff,
-                                move_path: move_path.map(|p| cwd.join(p)),
+                                move_path: move_path.clone().map(|p| cwd.join(p)),
+                                original_content,
                                 new_content: contents,
                             },
                         );
@@ -297,6 +488,7 @@ pub fn maybe_parse_apply_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
             }
             MaybeApplyPatchVerified::Body(ApplyPatchAction {
                 changes,
+                hunks: hunks_vec,
                 patch,
                 cwd: effective_cwd,
             })
@@ -806,8 +998,9 @@ fn apply_replacements(
 /// Intended result of a file update for apply_patch.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ApplyPatchFileUpdate {
-    unified_diff: String,
-    content: String,
+    pub unified_diff: String,
+    pub original_content: String,
+    pub content: String,
 }
 
 pub fn unified_diff_from_chunks(
@@ -830,6 +1023,7 @@ pub fn unified_diff_from_chunks_with_context(
     let unified_diff = text_diff.unified_diff().context_radius(context).to_string();
     Ok(ApplyPatchFileUpdate {
         unified_diff,
+        original_content: original_contents,
         content: new_contents,
     })
 }
@@ -1384,6 +1578,7 @@ PATCH"#,
 "#;
         let expected = ApplyPatchFileUpdate {
             unified_diff: expected_diff.to_string(),
+            original_content: "foo\nbar\nbaz\nqux\n".to_string(),
             content: "foo\nBAR\nbaz\nQUX\n".to_string(),
         };
         assert_eq!(expected, diff);
@@ -1420,6 +1615,7 @@ PATCH"#,
 "#;
         let expected = ApplyPatchFileUpdate {
             unified_diff: expected_diff.to_string(),
+            original_content: "foo\nbar\nbaz\n".to_string(),
             content: "FOO\nbar\nbaz\n".to_string(),
         };
         assert_eq!(expected, diff);
@@ -1457,6 +1653,7 @@ PATCH"#,
 "#;
         let expected = ApplyPatchFileUpdate {
             unified_diff: expected_diff.to_string(),
+            original_content: "foo\nbar\nbaz\n".to_string(),
             content: "foo\nbar\nBAZ\n".to_string(),
         };
         assert_eq!(expected, diff);
@@ -1491,6 +1688,7 @@ PATCH"#,
 "#;
         let expected = ApplyPatchFileUpdate {
             unified_diff: expected_diff.to_string(),
+            original_content: "foo\nbar\nbaz\n".to_string(),
             content: "foo\nbar\nbaz\nquux\n".to_string(),
         };
         assert_eq!(expected, diff);
@@ -1546,6 +1744,7 @@ PATCH"#,
 
         let expected = ApplyPatchFileUpdate {
             unified_diff: expected_diff.to_string(),
+            original_content: "a\nb\nc\nd\ne\nf\n".to_string(),
             content: "a\nB\nc\nd\nE\nf\ng\n".to_string(),
         };
 
@@ -1593,6 +1792,7 @@ g
 
         // Verify the patch contents - as otherwise we may have pulled contents
         // from the wrong file (as we're using relative paths)
+        let expected_hunks = parse_patch(&argv[1]).unwrap().hunks;
         assert_eq!(
             result,
             MaybeApplyPatchVerified::Body(ApplyPatchAction {
@@ -1605,9 +1805,11 @@ g
 "#
                         .to_string(),
                         move_path: None,
+                        original_content: "session directory content\n".to_string(),
                         new_content: "updated session directory content\n".to_string(),
                     },
                 )]),
+                hunks: expected_hunks,
                 patch: argv[1].clone(),
                 cwd: session_dir.path().to_path_buf(),
             })

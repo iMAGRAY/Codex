@@ -42,6 +42,7 @@ pub mod custom_terminal;
 mod diff_render;
 mod exec_command;
 mod file_search;
+mod file_explorer;
 mod frames;
 mod get_git_diff;
 mod history_cell;
@@ -544,6 +545,7 @@ fn should_show_model_rollout_prompt(
 mod tests {
     use super::*;
     use clap::Parser;
+    use codex_core::auth::AuthAccount;
     use codex_core::auth::AuthDotJson;
     use codex_core::auth::get_auth_file;
     use codex_core::auth::login_with_api_key;
@@ -587,13 +589,21 @@ mod tests {
                 id_info.raw_jwt = FAKE_JWT.to_string();
                 let auth = AuthDotJson {
                     openai_api_key: None,
-                    tokens: Some(TokenData {
-                        id_token: id_info,
-                        access_token: "access-token".to_string(),
-                        refresh_token: "refresh-token".to_string(),
-                        account_id: None,
-                    }),
+                    tokens: None,
                     last_refresh: None,
+                    accounts: vec![AuthAccount {
+                        openai_api_key: None,
+                        tokens: Some(TokenData {
+                            id_token: id_info,
+                            access_token: "access-token".to_string(),
+                            refresh_token: "refresh-token".to_string(),
+                            account_id: None,
+                        }),
+                        last_refresh: None,
+                        rate_limit_reset: None,
+                    }],
+                    current_account_index: Some(0),
+                    rotation_enabled: Some(false),
                 };
                 let file = get_auth_file(codex_home);
                 write_auth_json(&file, &auth).expect("write chatgpt auth.json");

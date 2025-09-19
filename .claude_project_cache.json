@@ -6,7 +6,14 @@
         "path": ".\\AGENTS.md",
         "relative_path": "AGENTS.md",
         "file_type": "md",
-        "size_bytes": 4819,
+        "size_bytes": 6987,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\Accounts.md",
+        "relative_path": "Accounts.md",
+        "file_type": "md",
+        "size_bytes": 6828,
         "is_code_file": true
       },
       {
@@ -29,6 +36,13 @@
         "file_type": "md",
         "size_bytes": 26710,
         "is_code_file": true
+      },
+      {
+        "path": ".\\Makefile",
+        "relative_path": "Makefile",
+        "file_type": "none",
+        "size_bytes": 2486,
+        "is_code_file": false
       },
       {
         "path": ".\\PNPM.md",
@@ -118,14 +132,14 @@
         "path": ".\\codex-rs\\Cargo.lock",
         "relative_path": "codex-rs/Cargo.lock",
         "file_type": "lock",
-        "size_bytes": 156102,
+        "size_bytes": 187097,
         "is_code_file": false
       },
       {
         "path": ".\\codex-rs\\Cargo.toml",
         "relative_path": "codex-rs/Cargo.toml",
         "file_type": "toml",
-        "size_bytes": 1224,
+        "size_bytes": 1226,
         "is_code_file": true
       },
       {
@@ -164,10 +178,24 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\apply-patch\\src\\cli.rs",
+        "relative_path": "codex-rs/apply-patch/src/cli.rs",
+        "file_type": "rs",
+        "size_bytes": 8334,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\apply-patch\\src\\interactive.rs",
+        "relative_path": "codex-rs/apply-patch/src/interactive.rs",
+        "file_type": "rs",
+        "size_bytes": 2569,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\apply-patch\\src\\lib.rs",
         "relative_path": "codex-rs/apply-patch/src/lib.rs",
         "file_type": "rs",
-        "size_bytes": 56134,
+        "size_bytes": 61477,
         "is_code_file": true
       },
       {
@@ -195,7 +223,7 @@
         "path": ".\\codex-rs\\apply-patch\\src\\standalone_executable.rs",
         "relative_path": "codex-rs/apply-patch/src/standalone_executable.rs",
         "file_type": "rs",
-        "size_bytes": 1944,
+        "size_bytes": 2239,
         "is_code_file": true
       },
       {
@@ -314,7 +342,14 @@
         "path": ".\\codex-rs\\cli\\Cargo.toml",
         "relative_path": "codex-rs/cli/Cargo.toml",
         "file_type": "toml",
-        "size_bytes": 1240,
+        "size_bytes": 1258,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\cli\\src\\audit_cmd.rs",
+        "relative_path": "codex-rs/cli/src/audit_cmd.rs",
+        "file_type": "rs",
+        "size_bytes": 4478,
         "is_code_file": true
       },
       {
@@ -322,6 +357,13 @@
         "relative_path": "codex-rs/cli/src/debug_sandbox.rs",
         "file_type": "rs",
         "size_bytes": 3190,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\cli\\src\\doc_cmd.rs",
+        "relative_path": "codex-rs/cli/src/doc_cmd.rs",
+        "file_type": "rs",
+        "size_bytes": 10824,
         "is_code_file": true
       },
       {
@@ -342,14 +384,14 @@
         "path": ".\\codex-rs\\cli\\src\\login.rs",
         "relative_path": "codex-rs/cli/src/login.rs",
         "file_type": "rs",
-        "size_bytes": 4617,
+        "size_bytes": 7950,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\cli\\src\\main.rs",
         "relative_path": "codex-rs/cli/src/main.rs",
         "file_type": "rs",
-        "size_bytes": 16309,
+        "size_bytes": 17262,
         "is_code_file": true
       },
       {
@@ -384,7 +426,21 @@
         "path": ".\\codex-rs\\cli\\src\\mcp_cmd.rs",
         "relative_path": "codex-rs/cli/src/mcp_cmd.rs",
         "file_type": "rs",
-        "size_bytes": 22213,
+        "size_bytes": 22309,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\cli\\src\\orchestrator_cmd.rs",
+        "relative_path": "codex-rs/cli/src/orchestrator_cmd.rs",
+        "file_type": "rs",
+        "size_bytes": 14136,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\cli\\src\\pipeline_cmd.rs",
+        "relative_path": "codex-rs/cli/src/pipeline_cmd.rs",
+        "file_type": "rs",
+        "size_bytes": 10780,
         "is_code_file": true
       },
       {
@@ -399,6 +455,13 @@
         "relative_path": "codex-rs/cli/src/stellar_cmd.rs",
         "file_type": "rs",
         "size_bytes": 5266,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\cli\\tests\\audit_export.rs",
+        "relative_path": "codex-rs/cli/tests/audit_export.rs",
+        "file_type": "rs",
+        "size_bytes": 730,
         "is_code_file": true
       },
       {
@@ -524,7 +587,7 @@
         "path": ".\\codex-rs\\core\\Cargo.toml",
         "relative_path": "codex-rs/core/Cargo.toml",
         "file_type": "toml",
-        "size_bytes": 2383,
+        "size_bytes": 2708,
         "is_code_file": true
       },
       {
@@ -545,7 +608,7 @@
         "path": ".\\codex-rs\\core\\gpt_5_codex_prompt.md",
         "relative_path": "codex-rs/core/gpt_5_codex_prompt.md",
         "file_type": "md",
-        "size_bytes": 9817,
+        "size_bytes": 9717,
         "is_code_file": true
       },
       {
@@ -566,7 +629,7 @@
         "path": ".\\codex-rs\\core\\src\\auth.rs",
         "relative_path": "codex-rs/core/src/auth.rs",
         "file_type": "rs",
-        "size_bytes": 22478,
+        "size_bytes": 43246,
         "is_code_file": true
       },
       {
@@ -587,7 +650,7 @@
         "path": ".\\codex-rs\\core\\src\\client.rs",
         "relative_path": "codex-rs/core/src/client.rs",
         "file_type": "rs",
-        "size_bytes": 43257,
+        "size_bytes": 43768,
         "is_code_file": true
       },
       {
@@ -601,14 +664,14 @@
         "path": ".\\codex-rs\\core\\src\\codex.rs",
         "relative_path": "codex-rs/core/src/codex.rs",
         "file_type": "rs",
-        "size_bytes": 143203,
+        "size_bytes": 143690,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\core\\src\\codex\\compact.rs",
         "relative_path": "codex-rs/core/src/codex/compact.rs",
         "file_type": "rs",
-        "size_bytes": 12365,
+        "size_bytes": 36831,
         "is_code_file": true
       },
       {
@@ -713,7 +776,7 @@
         "path": ".\\codex-rs\\core\\src\\exec.rs",
         "relative_path": "codex-rs/core/src/exec.rs",
         "file_type": "rs",
-        "size_bytes": 14537,
+        "size_bytes": 21205,
         "is_code_file": true
       },
       {
@@ -804,7 +867,7 @@
         "path": ".\\codex-rs\\core\\src\\lib.rs",
         "relative_path": "codex-rs/core/src/lib.rs",
         "file_type": "rs",
-        "size_bytes": 3219,
+        "size_bytes": 3302,
         "is_code_file": true
       },
       {
@@ -923,7 +986,7 @@
         "path": ".\\codex-rs\\core\\src\\message_history.rs",
         "relative_path": "codex-rs/core/src/message_history.rs",
         "file_type": "rs",
-        "size_bytes": 9639,
+        "size_bytes": 10030,
         "is_code_file": true
       },
       {
@@ -955,6 +1018,13 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\core\\src\\orchestrator\\mod.rs",
+        "relative_path": "codex-rs/core/src/orchestrator/mod.rs",
+        "file_type": "rs",
+        "size_bytes": 24828,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\core\\src\\parse_command.rs",
         "relative_path": "codex-rs/core/src/parse_command.rs",
         "file_type": "rs",
@@ -962,10 +1032,17 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\core\\src\\pipeline\\mod.rs",
+        "relative_path": "codex-rs/core/src/pipeline/mod.rs",
+        "file_type": "rs",
+        "size_bytes": 39349,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\core\\src\\plan_tool.rs",
         "relative_path": "codex-rs/core/src/plan_tool.rs",
         "file_type": "rs",
-        "size_bytes": 4051,
+        "size_bytes": 4089,
         "is_code_file": true
       },
       {
@@ -979,7 +1056,7 @@
         "path": ".\\codex-rs\\core\\src\\resilience\\cache.rs",
         "relative_path": "codex-rs/core/src/resilience/cache.rs",
         "file_type": "rs",
-        "size_bytes": 10225,
+        "size_bytes": 10444,
         "is_code_file": true
       },
       {
@@ -1084,7 +1161,7 @@
         "path": ".\\codex-rs\\core\\src\\security\\mod.rs",
         "relative_path": "codex-rs/core/src/security/mod.rs",
         "file_type": "rs",
-        "size_bytes": 10217,
+        "size_bytes": 25973,
         "is_code_file": true
       },
       {
@@ -1162,6 +1239,20 @@
         "relative_path": "codex-rs/core/src/stellar/tests.rs",
         "file_type": "rs",
         "size_bytes": 3709,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\core\\src\\telemetry.rs",
+        "relative_path": "codex-rs/core/src/telemetry.rs",
+        "file_type": "rs",
+        "size_bytes": 5982,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\core\\src\\telemetry_exporter.rs",
+        "relative_path": "codex-rs/core/src/telemetry_exporter.rs",
+        "file_type": "rs",
+        "size_bytes": 17696,
         "is_code_file": true
       },
       {
@@ -1301,21 +1392,21 @@
         "path": ".\\codex-rs\\core\\tests\\suite\\client.rs",
         "relative_path": "codex-rs/core/tests/suite/client.rs",
         "file_type": "rs",
-        "size_bytes": 37892,
+        "size_bytes": 36882,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\core\\tests\\suite\\compact.rs",
         "relative_path": "codex-rs/core/tests/suite/compact.rs",
         "file_type": "rs",
-        "size_bytes": 31280,
+        "size_bytes": 30040,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\core\\tests\\suite\\compact_resume_fork.rs",
         "relative_path": "codex-rs/core/tests/suite/compact_resume_fork.rs",
         "file_type": "rs",
-        "size_bytes": 27531,
+        "size_bytes": 27952,
         "is_code_file": true
       },
       {
@@ -1795,6 +1886,62 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\gui\\Cargo.toml",
+        "relative_path": "codex-rs/gui/Cargo.toml",
+        "file_type": "toml",
+        "size_bytes": 815,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\src\\backend\\codex.rs",
+        "relative_path": "codex-rs/gui/src/backend/codex.rs",
+        "file_type": "rs",
+        "size_bytes": 18996,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\src\\backend\\mod.rs",
+        "relative_path": "codex-rs/gui/src/backend/mod.rs",
+        "file_type": "rs",
+        "size_bytes": 10830,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\src\\lib.rs",
+        "relative_path": "codex-rs/gui/src/lib.rs",
+        "file_type": "rs",
+        "size_bytes": 1407,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\src\\main.rs",
+        "relative_path": "codex-rs/gui/src/main.rs",
+        "file_type": "rs",
+        "size_bytes": 762,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\src\\runtime\\mod.rs",
+        "relative_path": "codex-rs/gui/src/runtime/mod.rs",
+        "file_type": "rs",
+        "size_bytes": 1301,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\src\\ui\\mod.rs",
+        "relative_path": "codex-rs/gui/src/ui/mod.rs",
+        "file_type": "rs",
+        "size_bytes": 16347,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\gui\\tests\\smoke.rs",
+        "relative_path": "codex-rs/gui/tests/smoke.rs",
+        "file_type": "rs",
+        "size_bytes": 809,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\linux-sandbox\\Cargo.toml",
         "relative_path": "codex-rs/linux-sandbox/Cargo.toml",
         "file_type": "toml",
@@ -1889,7 +2036,7 @@
         "path": ".\\codex-rs\\login\\src\\server.rs",
         "relative_path": "codex-rs/login/src/server.rs",
         "file_type": "rs",
-        "size_bytes": 20789,
+        "size_bytes": 21115,
         "is_code_file": true
       },
       {
@@ -1903,7 +2050,7 @@
         "path": ".\\codex-rs\\login\\tests\\suite\\login_server_e2e.rs",
         "relative_path": "codex-rs/login/tests/suite/login_server_e2e.rs",
         "file_type": "rs",
-        "size_bytes": 9491,
+        "size_bytes": 9547,
         "is_code_file": true
       },
       {
@@ -1952,7 +2099,7 @@
         "path": ".\\codex-rs\\mcp-server\\src\\codex_message_processor.rs",
         "relative_path": "codex-rs/mcp-server/src/codex_message_processor.rs",
         "file_type": "rs",
-        "size_bytes": 56468,
+        "size_bytes": 55019,
         "is_code_file": true
       },
       {
@@ -2127,7 +2274,7 @@
         "path": ".\\codex-rs\\mcp-server\\tests\\suite\\login.rs",
         "relative_path": "codex-rs/mcp-server/tests/suite/login.rs",
         "file_type": "rs",
-        "size_bytes": 5259,
+        "size_bytes": 5168,
         "is_code_file": true
       },
       {
@@ -2162,7 +2309,7 @@
         "path": ".\\codex-rs\\mcp-server\\tests\\suite\\user_info.rs",
         "relative_path": "codex-rs/mcp-server/tests/suite/user_info.rs",
         "file_type": "rs",
-        "size_bytes": 2810,
+        "size_bytes": 3110,
         "is_code_file": true
       },
       {
@@ -2404,10 +2551,17 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\todo.completed.machine.md",
+        "relative_path": "codex-rs/todo.completed.machine.md",
+        "file_type": "md",
+        "size_bytes": 4492,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\todo.machine.md",
         "relative_path": "codex-rs/todo.machine.md",
         "file_type": "md",
-        "size_bytes": 2916,
+        "size_bytes": 9553,
         "is_code_file": true
       },
       {
@@ -2428,7 +2582,7 @@
         "path": ".\\codex-rs\\tui\\src\\app.rs",
         "relative_path": "codex-rs/tui/src/app.rs",
         "file_type": "rs",
-        "size_bytes": 30398,
+        "size_bytes": 48352,
         "is_code_file": true
       },
       {
@@ -2442,7 +2596,7 @@
         "path": ".\\codex-rs\\tui\\src\\app_event.rs",
         "relative_path": "codex-rs/tui/src/app_event.rs",
         "file_type": "rs",
-        "size_bytes": 2843,
+        "size_bytes": 2985,
         "is_code_file": true
       },
       {
@@ -2477,7 +2631,7 @@
         "path": ".\\codex-rs\\tui\\src\\bottom_pane\\chat_composer.rs",
         "relative_path": "codex-rs/tui/src/bottom_pane/chat_composer.rs",
         "file_type": "rs",
-        "size_bytes": 95824,
+        "size_bytes": 98282,
         "is_code_file": true
       },
       {
@@ -2512,7 +2666,7 @@
         "path": ".\\codex-rs\\tui\\src\\bottom_pane\\mod.rs",
         "relative_path": "codex-rs/tui/src/bottom_pane/mod.rs",
         "file_type": "rs",
-        "size_bytes": 26524,
+        "size_bytes": 26762,
         "is_code_file": true
       },
       {
@@ -2554,7 +2708,7 @@
         "path": ".\\codex-rs\\tui\\src\\chatwidget.rs",
         "relative_path": "codex-rs/tui/src/chatwidget.rs",
         "file_type": "rs",
-        "size_bytes": 62937,
+        "size_bytes": 63345,
         "is_code_file": true
       },
       {
@@ -2628,6 +2782,13 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\tui\\src\\file_explorer.rs",
+        "relative_path": "codex-rs/tui/src/file_explorer.rs",
+        "file_type": "rs",
+        "size_bytes": 21732,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\tui\\src\\file_search.rs",
         "relative_path": "codex-rs/tui/src/file_search.rs",
         "file_type": "rs",
@@ -2652,7 +2813,7 @@
         "path": ".\\codex-rs\\tui\\src\\history_cell.rs",
         "relative_path": "codex-rs/tui/src/history_cell.rs",
         "file_type": "rs",
-        "size_bytes": 78060,
+        "size_bytes": 78069,
         "is_code_file": true
       },
       {
@@ -2673,7 +2834,7 @@
         "path": ".\\codex-rs\\tui\\src\\lib.rs",
         "relative_path": "codex-rs/tui/src/lib.rs",
         "file_type": "rs",
-        "size_bytes": 22370,
+        "size_bytes": 22816,
         "is_code_file": true
       },
       {
@@ -2719,17 +2880,24 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\tui\\src\\mcp\\file_browser.rs",
+        "relative_path": "codex-rs/tui/src/mcp/file_browser.rs",
+        "file_type": "rs",
+        "size_bytes": 13165,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\tui\\src\\mcp\\manager_view.rs",
         "relative_path": "codex-rs/tui/src/mcp/manager_view.rs",
         "file_type": "rs",
-        "size_bytes": 17367,
+        "size_bytes": 20519,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\tui\\src\\mcp\\mod.rs",
         "relative_path": "codex-rs/tui/src/mcp/mod.rs",
         "file_type": "rs",
-        "size_bytes": 346,
+        "size_bytes": 363,
         "is_code_file": true
       },
       {
@@ -2743,7 +2911,7 @@
         "path": ".\\codex-rs\\tui\\src\\mcp\\wizard_view.rs",
         "relative_path": "codex-rs/tui/src/mcp/wizard_view.rs",
         "file_type": "rs",
-        "size_bytes": 55704,
+        "size_bytes": 58836,
         "is_code_file": true
       },
       {
@@ -2845,6 +3013,13 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\tui\\src\\status_bar.rs",
+        "relative_path": "codex-rs/tui/src/status_bar.rs",
+        "file_type": "rs",
+        "size_bytes": 6984,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\tui\\src\\status_indicator_widget.rs",
         "relative_path": "codex-rs/tui/src/status_indicator_widget.rs",
         "file_type": "rs",
@@ -2876,14 +3051,14 @@
         "path": ".\\codex-rs\\tui\\src\\stellar\\tests.rs",
         "relative_path": "codex-rs/tui/src/stellar/tests.rs",
         "file_type": "rs",
-        "size_bytes": 2011,
+        "size_bytes": 2482,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\tui\\src\\stellar\\view.rs",
         "relative_path": "codex-rs/tui/src/stellar/view.rs",
         "file_type": "rs",
-        "size_bytes": 9795,
+        "size_bytes": 11312,
         "is_code_file": true
       },
       {
@@ -2981,7 +3156,14 @@
         "path": ".\\codex-rs\\tui\\tests\\suite\\mod.rs",
         "relative_path": "codex-rs/tui/tests/suite/mod.rs",
         "file_type": "rs",
-        "size_bytes": 163,
+        "size_bytes": 188,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\tui\\tests\\suite\\overlay_investigate_flow.rs",
+        "relative_path": "codex-rs/tui/tests/suite/overlay_investigate_flow.rs",
+        "file_type": "rs",
+        "size_bytes": 1860,
         "is_code_file": true
       },
       {
@@ -3031,6 +3213,13 @@
         "relative_path": "docs/authentication.md",
         "file_type": "md",
         "size_bytes": 3116,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\docs\\codex-gui.md",
+        "relative_path": "docs/codex-gui.md",
+        "file_type": "md",
+        "size_bytes": 8781,
         "is_code_file": true
       },
       {
@@ -3160,10 +3349,17 @@
         "is_code_file": true
       },
       {
+        "path": ".\\docs\\future\\stellar\\m3-security-validation.md",
+        "relative_path": "docs/future/stellar/m3-security-validation.md",
+        "file_type": "md",
+        "size_bytes": 2499,
+        "is_code_file": true
+      },
+      {
         "path": ".\\docs\\future\\stellar\\metrics-baseline.md",
         "relative_path": "docs/future/stellar/metrics-baseline.md",
         "file_type": "md",
-        "size_bytes": 1461,
+        "size_bytes": 3791,
         "is_code_file": true
       },
       {
@@ -3184,14 +3380,14 @@
         "path": ".\\docs\\getting-started.md",
         "relative_path": "docs/getting-started.md",
         "file_type": "md",
-        "size_bytes": 5265,
+        "size_bytes": 7750,
         "is_code_file": true
       },
       {
         "path": ".\\docs\\install.md",
         "relative_path": "docs/install.md",
         "file_type": "md",
-        "size_bytes": 1550,
+        "size_bytes": 2126,
         "is_code_file": true
       },
       {
@@ -3272,10 +3468,115 @@
         "is_code_file": true
       },
       {
+        "path": ".\\docs\\stellar-quickstart.md",
+        "relative_path": "docs/stellar-quickstart.md",
+        "file_type": "md",
+        "size_bytes": 7255,
+        "is_code_file": true
+      },
+      {
         "path": ".\\docs\\zdr.md",
         "relative_path": "docs/zdr.md",
         "file_type": "md",
         "size_bytes": 201,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\1_Pooling\\config.json",
+        "relative_path": "embeddinggemma-300m/1_Pooling/config.json",
+        "file_type": "json",
+        "size_bytes": 312,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\2_Dense\\config.json",
+        "relative_path": "embeddinggemma-300m/2_Dense/config.json",
+        "file_type": "json",
+        "size_bytes": 134,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\3_Dense\\config.json",
+        "relative_path": "embeddinggemma-300m/3_Dense/config.json",
+        "file_type": "json",
+        "size_bytes": 134,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\README.md",
+        "relative_path": "embeddinggemma-300m/README.md",
+        "file_type": "md",
+        "size_bytes": 16656,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\added_tokens.json",
+        "relative_path": "embeddinggemma-300m/added_tokens.json",
+        "file_type": "json",
+        "size_bytes": 35,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\config.json",
+        "relative_path": "embeddinggemma-300m/config.json",
+        "file_type": "json",
+        "size_bytes": 1488,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\config_sentence_transformers.json",
+        "relative_path": "embeddinggemma-300m/config_sentence_transformers.json",
+        "file_type": "json",
+        "size_bytes": 997,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\generation_config.json",
+        "relative_path": "embeddinggemma-300m/generation_config.json",
+        "file_type": "json",
+        "size_bytes": 133,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\modules.json",
+        "relative_path": "embeddinggemma-300m/modules.json",
+        "file_type": "json",
+        "size_bytes": 573,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\sentence_bert_config.json",
+        "relative_path": "embeddinggemma-300m/sentence_bert_config.json",
+        "file_type": "json",
+        "size_bytes": 58,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\special_tokens_map.json",
+        "relative_path": "embeddinggemma-300m/special_tokens_map.json",
+        "file_type": "json",
+        "size_bytes": 662,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\tokenizer.json",
+        "relative_path": "embeddinggemma-300m/tokenizer.json",
+        "file_type": "json",
+        "size_bytes": 33385008,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\embeddinggemma-300m\\tokenizer_config.json",
+        "relative_path": "embeddinggemma-300m/tokenizer_config.json",
+        "file_type": "json",
+        "size_bytes": 1155346,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\hook-input-debug.json",
+        "relative_path": "hook-input-debug.json",
+        "file_type": "json",
+        "size_bytes": 55446,
         "is_code_file": true
       },
       {
@@ -3328,6 +3629,41 @@
         "is_code_file": true
       },
       {
+        "path": ".\\scripts\\docsearch\\__init__.py",
+        "relative_path": "scripts/docsearch/__init__.py",
+        "file_type": "py",
+        "size_bytes": 114,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\scripts\\docsearch\\common.py",
+        "relative_path": "scripts/docsearch/common.py",
+        "file_type": "py",
+        "size_bytes": 5036,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\scripts\\docsearch\\index.py",
+        "relative_path": "scripts/docsearch/index.py",
+        "file_type": "py",
+        "size_bytes": 3292,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\scripts\\docsearch\\query.py",
+        "relative_path": "scripts/docsearch/query.py",
+        "file_type": "py",
+        "size_bytes": 3217,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\scripts\\docsearch\\tests\\test_chunking.py",
+        "relative_path": "scripts/docsearch/tests/test_chunking.py",
+        "file_type": "py",
+        "size_bytes": 482,
+        "is_code_file": true
+      },
+      {
         "path": ".\\scripts\\readme_toc.py",
         "relative_path": "scripts/readme_toc.py",
         "file_type": "py",
@@ -3338,7 +3674,7 @@
         "path": ".\\todo.md",
         "relative_path": "todo.md",
         "file_type": "md",
-        "size_bytes": 16458,
+        "size_bytes": 18490,
         "is_code_file": true
       }
     ],
@@ -3373,6 +3709,8 @@
       "codex-rs/core/src/exec_command",
       "codex-rs/core/src/mcp",
       "codex-rs/core/src/mcp/intake",
+      "codex-rs/core/src/orchestrator",
+      "codex-rs/core/src/pipeline",
       "codex-rs/core/src/resilience",
       "codex-rs/core/src/rollout",
       "codex-rs/core/src/security",
@@ -3398,6 +3736,12 @@
       "codex-rs/fixtures/mcp",
       "codex-rs/fixtures/mcp/node-basic",
       "codex-rs/fixtures/mcp/python-basic",
+      "codex-rs/gui",
+      "codex-rs/gui/src",
+      "codex-rs/gui/src/backend",
+      "codex-rs/gui/src/runtime",
+      "codex-rs/gui/src/ui",
+      "codex-rs/gui/tests",
       "codex-rs/linux-sandbox",
       "codex-rs/linux-sandbox/src",
       "codex-rs/linux-sandbox/tests",
@@ -3463,14 +3807,21 @@
       "docs/future/stellar",
       "docs/future/stellar/adrs",
       "docs/rfcs",
+      "embeddinggemma-300m",
+      "embeddinggemma-300m/1_Pooling",
+      "embeddinggemma-300m/2_Dense",
+      "embeddinggemma-300m/3_Dense",
+      "logs",
       "scripts",
-      "scripts/chaos"
+      "scripts/chaos",
+      "scripts/docsearch",
+      "scripts/docsearch/tests"
     ],
-    "total_files": 477,
-    "scan_timestamp": "2025-09-18 21:39:39"
+    "total_files": 525,
+    "scan_timestamp": "2025-09-20 00:37:14"
   },
   "metrics": {
-    "total_lines_of_code": 88921,
+    "total_lines_of_code": 2530872,
     "code_by_language": {
       "html": {
         "file_count": 1,
@@ -3501,12 +3852,12 @@
         "average_nesting_depth": 0.0
       },
       "json": {
-        "file_count": 15,
-        "lines_of_code": 5072,
+        "file_count": 28,
+        "lines_of_code": 2436243,
         "lines_of_comments": 0,
         "blank_lines": 2,
-        "average_file_size": 338,
-        "complexity_estimate": 50.72,
+        "average_file_size": 87008,
+        "complexity_estimate": 24362.43,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3515,12 +3866,12 @@
         "average_nesting_depth": 0.0
       },
       "md": {
-        "file_count": 67,
-        "lines_of_code": 4144,
+        "file_count": 73,
+        "lines_of_code": 5153,
         "lines_of_comments": 0,
-        "blank_lines": 1119,
-        "average_file_size": 61,
-        "complexity_estimate": 41.44,
+        "blank_lines": 1277,
+        "average_file_size": 70,
+        "complexity_estimate": 51.53,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3529,12 +3880,12 @@
         "average_nesting_depth": 0.0
       },
       "py": {
-        "file_count": 6,
-        "lines_of_code": 816,
-        "lines_of_comments": 92,
-        "blank_lines": 172,
-        "average_file_size": 136,
-        "complexity_estimate": 7.2411256,
+        "file_count": 11,
+        "lines_of_code": 1149,
+        "lines_of_comments": 96,
+        "blank_lines": 235,
+        "average_file_size": 104,
+        "complexity_estimate": 10.530834,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3543,18 +3894,18 @@
         "average_nesting_depth": 0.0
       },
       "rs": {
-        "file_count": 350,
-        "lines_of_code": 77527,
-        "lines_of_comments": 6458,
-        "blank_lines": 9129,
-        "average_file_size": 221,
-        "complexity_estimate": 215.03726,
-        "average_cyclomatic": 26.142857,
-        "average_cognitive": 30.265715,
+        "file_count": 372,
+        "lines_of_code": 86922,
+        "lines_of_comments": 6672,
+        "blank_lines": 10098,
+        "average_file_size": 233,
+        "complexity_estimate": 242.62875,
+        "average_cyclomatic": 26.836021,
+        "average_cognitive": 31.282259,
         "max_cyclomatic": 463,
         "max_cognitive": 429,
-        "total_functions": 1756,
-        "average_nesting_depth": 1.6428572
+        "total_functions": 1865,
+        "average_nesting_depth": 1.6639785
       },
       "sh": {
         "file_count": 5,
@@ -3571,12 +3922,12 @@
         "average_nesting_depth": 0.0
       },
       "toml": {
-        "file_count": 27,
-        "lines_of_code": 748,
+        "file_count": 28,
+        "lines_of_code": 791,
         "lines_of_comments": 0,
-        "blank_lines": 105,
-        "average_file_size": 27,
-        "complexity_estimate": 7.48,
+        "blank_lines": 151,
+        "average_file_size": 28,
+        "complexity_estimate": 7.91,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3601,9 +3952,11 @@
     },
     "file_importance_scores": {
       "AGENTS.md": 0.5,
+      "Accounts.md": 0.5,
       "CHANGELOG.md": 0.5,
       "CHANGES.md": 0.5,
       "Change1.md": 0.5,
+      "Makefile": 0.3,
       "PNPM.md": 0.5,
       "README.md": 0.8,
       "cliff.toml": 0.3,
@@ -3623,6 +3976,8 @@
       "codex-rs/ansi-escape/README.md": 0.5,
       "codex-rs/ansi-escape/src/lib.rs": 1.0,
       "codex-rs/apply-patch/Cargo.toml": 0.3,
+      "codex-rs/apply-patch/src/cli.rs": 1.0,
+      "codex-rs/apply-patch/src/interactive.rs": 1.0,
       "codex-rs/apply-patch/src/lib.rs": 1.0,
       "codex-rs/apply-patch/src/main.rs": 1.0,
       "codex-rs/apply-patch/src/parser.rs": 1.0,
@@ -3645,7 +4000,9 @@
       "codex-rs/chatgpt/tests/suite/mod.rs": 0.7,
       "codex-rs/chatgpt/tests/task_turn_fixture.json": 0.7,
       "codex-rs/cli/Cargo.toml": 0.3,
+      "codex-rs/cli/src/audit_cmd.rs": 1.0,
       "codex-rs/cli/src/debug_sandbox.rs": 1.0,
+      "codex-rs/cli/src/doc_cmd.rs": 1.0,
       "codex-rs/cli/src/exit_status.rs": 1.0,
       "codex-rs/cli/src/lib.rs": 1.0,
       "codex-rs/cli/src/login.rs": 1.0,
@@ -3655,8 +4012,11 @@
       "codex-rs/cli/src/mcp/signing.rs": 1.0,
       "codex-rs/cli/src/mcp/wizard.rs": 1.0,
       "codex-rs/cli/src/mcp_cmd.rs": 1.0,
+      "codex-rs/cli/src/orchestrator_cmd.rs": 1.0,
+      "codex-rs/cli/src/pipeline_cmd.rs": 1.0,
       "codex-rs/cli/src/proto.rs": 1.0,
       "codex-rs/cli/src/stellar_cmd.rs": 1.0,
+      "codex-rs/cli/tests/audit_export.rs": 0.7,
       "codex-rs/cli/tests/mcp_add_remove.rs": 0.7,
       "codex-rs/cli/tests/mcp_list.rs": 0.7,
       "codex-rs/cli/tests/mcp_wizard.rs": 0.7,
@@ -3736,7 +4096,9 @@
       "codex-rs/core/src/model_provider_info.rs": 1.0,
       "codex-rs/core/src/openai_model_info.rs": 1.0,
       "codex-rs/core/src/openai_tools.rs": 1.0,
+      "codex-rs/core/src/orchestrator/mod.rs": 1.0,
       "codex-rs/core/src/parse_command.rs": 1.0,
+      "codex-rs/core/src/pipeline/mod.rs": 1.0,
       "codex-rs/core/src/plan_tool.rs": 1.0,
       "codex-rs/core/src/project_doc.rs": 1.0,
       "codex-rs/core/src/resilience/cache.rs": 1.0,
@@ -3766,6 +4128,8 @@
       "codex-rs/core/src/stellar/snapshot.rs": 1.0,
       "codex-rs/core/src/stellar/state.rs": 1.0,
       "codex-rs/core/src/stellar/tests.rs": 0.7,
+      "codex-rs/core/src/telemetry.rs": 1.0,
+      "codex-rs/core/src/telemetry_exporter.rs": 1.0,
       "codex-rs/core/src/terminal.rs": 1.0,
       "codex-rs/core/src/token_data.rs": 1.0,
       "codex-rs/core/src/tool_apply_patch.rs": 1.0,
@@ -3856,6 +4220,14 @@
       "codex-rs/fixtures/mcp/node-basic/server.js": 0.9,
       "codex-rs/fixtures/mcp/python-basic/main.py": 1.0,
       "codex-rs/fixtures/mcp/python-basic/pyproject.toml": 0.3,
+      "codex-rs/gui/Cargo.toml": 0.3,
+      "codex-rs/gui/src/backend/codex.rs": 1.0,
+      "codex-rs/gui/src/backend/mod.rs": 1.0,
+      "codex-rs/gui/src/lib.rs": 1.0,
+      "codex-rs/gui/src/main.rs": 1.0,
+      "codex-rs/gui/src/runtime/mod.rs": 1.0,
+      "codex-rs/gui/src/ui/mod.rs": 1.0,
+      "codex-rs/gui/tests/smoke.rs": 0.7,
       "codex-rs/linux-sandbox/Cargo.toml": 0.3,
       "codex-rs/linux-sandbox/README.md": 0.5,
       "codex-rs/linux-sandbox/src/landlock.rs": 1.0,
@@ -3943,6 +4315,7 @@
       "codex-rs/protocol/src/protocol.rs": 1.0,
       "codex-rs/rust-toolchain.toml": 0.3,
       "codex-rs/rustfmt.toml": 0.3,
+      "codex-rs/todo.completed.machine.md": 0.5,
       "codex-rs/todo.machine.md": 0.5,
       "codex-rs/tui/Cargo.toml": 0.3,
       "codex-rs/tui/prompt_for_init_command.md": 0.5,
@@ -3975,6 +4348,7 @@
       "codex-rs/tui/src/custom_terminal.rs": 1.0,
       "codex-rs/tui/src/diff_render.rs": 1.0,
       "codex-rs/tui/src/exec_command.rs": 1.0,
+      "codex-rs/tui/src/file_explorer.rs": 1.0,
       "codex-rs/tui/src/file_search.rs": 1.0,
       "codex-rs/tui/src/frames.rs": 1.0,
       "codex-rs/tui/src/get_git_diff.rs": 1.0,
@@ -3988,6 +4362,7 @@
       "codex-rs/tui/src/markdown_render.rs": 1.0,
       "codex-rs/tui/src/markdown_render_tests.rs": 0.7,
       "codex-rs/tui/src/markdown_stream.rs": 1.0,
+      "codex-rs/tui/src/mcp/file_browser.rs": 1.0,
       "codex-rs/tui/src/mcp/manager_view.rs": 1.0,
       "codex-rs/tui/src/mcp/mod.rs": 1.0,
       "codex-rs/tui/src/mcp/types.rs": 1.0,
@@ -4006,6 +4381,7 @@
       "codex-rs/tui/src/session_log.rs": 1.0,
       "codex-rs/tui/src/shimmer.rs": 1.0,
       "codex-rs/tui/src/slash_command.rs": 1.0,
+      "codex-rs/tui/src/status_bar.rs": 1.0,
       "codex-rs/tui/src/status_indicator_widget.rs": 1.0,
       "codex-rs/tui/src/stellar/controller.rs": 1.0,
       "codex-rs/tui/src/stellar/keymap.rs": 1.0,
@@ -4026,6 +4402,7 @@
       "codex-rs/tui/tests/accessibility/stellar_core_smoke.rs": 0.7,
       "codex-rs/tui/tests/all.rs": 0.7,
       "codex-rs/tui/tests/suite/mod.rs": 0.7,
+      "codex-rs/tui/tests/suite/overlay_investigate_flow.rs": 0.7,
       "codex-rs/tui/tests/suite/status_indicator.rs": 0.7,
       "codex-rs/tui/tests/suite/vt100_history.rs": 0.7,
       "codex-rs/tui/tests/suite/vt100_live_commit.rs": 0.7,
@@ -4033,6 +4410,7 @@
       "docs/CLA.md": 0.5,
       "docs/advanced.md": 0.5,
       "docs/authentication.md": 0.5,
+      "docs/codex-gui.md": 0.5,
       "docs/config.md": 0.5,
       "docs/contributing.md": 0.5,
       "docs/experimental.md": 0.5,
@@ -4051,6 +4429,7 @@
       "docs/future/stellar/m1-core-plan.md": 0.5,
       "docs/future/stellar/m2-resilience-plan.md": 0.5,
       "docs/future/stellar/m3-security-plan.md": 0.5,
+      "docs/future/stellar/m3-security-validation.md": 0.5,
       "docs/future/stellar/metrics-baseline.md": 0.5,
       "docs/future/stellar/review-log.md": 0.5,
       "docs/future/stellar/rfc-adr-template.md": 0.5,
@@ -4067,7 +4446,22 @@
       "docs/rfcs/0004-stellar-security.md": 0.5,
       "docs/rfcs/0005-stellar-delivery.md": 0.5,
       "docs/sandbox.md": 0.5,
+      "docs/stellar-quickstart.md": 0.5,
       "docs/zdr.md": 0.5,
+      "embeddinggemma-300m/1_Pooling/config.json": 0.8,
+      "embeddinggemma-300m/2_Dense/config.json": 0.8,
+      "embeddinggemma-300m/3_Dense/config.json": 0.8,
+      "embeddinggemma-300m/README.md": 0.5,
+      "embeddinggemma-300m/added_tokens.json": 0.3,
+      "embeddinggemma-300m/config.json": 0.8,
+      "embeddinggemma-300m/config_sentence_transformers.json": 0.8,
+      "embeddinggemma-300m/generation_config.json": 0.8,
+      "embeddinggemma-300m/modules.json": 0.3,
+      "embeddinggemma-300m/sentence_bert_config.json": 0.8,
+      "embeddinggemma-300m/special_tokens_map.json": 0.7,
+      "embeddinggemma-300m/tokenizer.json": 0.3,
+      "embeddinggemma-300m/tokenizer_config.json": 0.8,
+      "hook-input-debug.json": 0.3,
       "mcp-ui.md": 0.5,
       "package.json": 1.0,
       "pnpm-lock.yaml": 0.3,
@@ -4075,20 +4469,25 @@
       "scripts/asciicheck.py": 0.9,
       "scripts/chaos/README.md": 0.5,
       "scripts/chaos/resilience_loop.sh": 0.3,
+      "scripts/docsearch/__init__.py": 0.9,
+      "scripts/docsearch/common.py": 0.9,
+      "scripts/docsearch/index.py": 1.0,
+      "scripts/docsearch/query.py": 0.9,
+      "scripts/docsearch/tests/test_chunking.py": 0.7,
       "scripts/readme_toc.py": 0.9,
       "todo.md": 0.5
     },
-    "project_complexity_score": 1.3143325,
-    "test_coverage_estimate": 0.20545073,
-    "documentation_ratio": 0.14046122,
-    "average_cyclomatic_complexity": 26.0,
-    "average_cognitive_complexity": 30.09375,
+    "project_complexity_score": 1.3822849,
+    "test_coverage_estimate": 0.19619048,
+    "documentation_ratio": 0.13904762,
+    "average_cyclomatic_complexity": 26.841398,
+    "average_cognitive_complexity": 31.282259,
     "max_cyclomatic_complexity": 463,
     "max_cognitive_complexity": 429,
     "high_complexity_files": 13,
     "complexity_distribution": {
-      "low_complexity": 296,
-      "medium_complexity": 43,
+      "low_complexity": 308,
+      "medium_complexity": 51,
       "high_complexity": 13,
       "extreme_complexity": 0
     }
@@ -4097,10 +4496,19 @@
     "AGENTS.md": {
       "path": "AGENTS.md",
       "modified_time": {
-        "secs_since_epoch": 1758189311,
-        "nanos_since_epoch": 866785800
+        "secs_since_epoch": 1758314365,
+        "nanos_since_epoch": 183703400
       },
-      "size": 4819,
+      "size": 6987,
+      "hash": null
+    },
+    "Accounts.md": {
+      "path": "Accounts.md",
+      "modified_time": {
+        "secs_since_epoch": 1758294288,
+        "nanos_since_epoch": 696551400
+      },
+      "size": 6828,
       "hash": null
     },
     "CHANGELOG.md": {
@@ -4128,6 +4536,15 @@
         "nanos_since_epoch": 902339400
       },
       "size": 26710,
+      "hash": null
+    },
+    "Makefile": {
+      "path": "Makefile",
+      "modified_time": {
+        "secs_since_epoch": 1758303964,
+        "nanos_since_epoch": 988001100
+      },
+      "size": 2486,
       "hash": null
     },
     "PNPM.md": {
@@ -4241,19 +4658,19 @@
     "codex-rs/Cargo.lock": {
       "path": "codex-rs/Cargo.lock",
       "modified_time": {
-        "secs_since_epoch": 1758219318,
-        "nanos_since_epoch": 888221700
+        "secs_since_epoch": 1758310402,
+        "nanos_since_epoch": 352508300
       },
-      "size": 156102,
+      "size": 187097,
       "hash": null
     },
     "codex-rs/Cargo.toml": {
       "path": "codex-rs/Cargo.toml",
       "modified_time": {
-        "secs_since_epoch": 1758209005,
-        "nanos_since_epoch": 563456200
+        "secs_since_epoch": 1758309540,
+        "nanos_since_epoch": 124960000
       },
-      "size": 1224,
+      "size": 1226,
       "hash": null
     },
     "codex-rs/README.md": {
@@ -4301,14 +4718,32 @@
       "size": 464,
       "hash": null
     },
+    "codex-rs/apply-patch/src/cli.rs": {
+      "path": "codex-rs/apply-patch/src/cli.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758316993,
+        "nanos_since_epoch": 41305700
+      },
+      "size": 8334,
+      "hash": null
+    },
+    "codex-rs/apply-patch/src/interactive.rs": {
+      "path": "codex-rs/apply-patch/src/interactive.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758316938,
+        "nanos_since_epoch": 320691800
+      },
+      "size": 2569,
+      "hash": null
+    },
     "codex-rs/apply-patch/src/lib.rs": {
       "path": "codex-rs/apply-patch/src/lib.rs",
       "modified_time": {
-        "secs_since_epoch": 1758125364,
-        "nanos_since_epoch": 459550800
+        "secs_since_epoch": 1758317743,
+        "nanos_since_epoch": 843711200
       },
-      "size": 56134,
-      "hash": "3f77480b25c4a5f2ea7dc275df87b88370c29f7f4e520c95e377b89e67f1f331"
+      "size": 61477,
+      "hash": "8044fe8170aa67ec2b2d00093b56c7aacdbfcbeafda6a77d6cd12102a657ede9"
     },
     "codex-rs/apply-patch/src/main.rs": {
       "path": "codex-rs/apply-patch/src/main.rs",
@@ -4340,10 +4775,10 @@
     "codex-rs/apply-patch/src/standalone_executable.rs": {
       "path": "codex-rs/apply-patch/src/standalone_executable.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 461051000
+        "secs_since_epoch": 1758317004,
+        "nanos_since_epoch": 311353700
       },
-      "size": 1944,
+      "size": 2239,
       "hash": null
     },
     "codex-rs/apply-patch/tests/all.rs": {
@@ -4493,10 +4928,19 @@
     "codex-rs/cli/Cargo.toml": {
       "path": "codex-rs/cli/Cargo.toml",
       "modified_time": {
-        "secs_since_epoch": 1758218609,
-        "nanos_since_epoch": 634632800
+        "secs_since_epoch": 1758277277,
+        "nanos_since_epoch": 349114800
       },
-      "size": 1240,
+      "size": 1258,
+      "hash": null
+    },
+    "codex-rs/cli/src/audit_cmd.rs": {
+      "path": "codex-rs/cli/src/audit_cmd.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758221758,
+        "nanos_since_epoch": 873527700
+      },
+      "size": 4478,
       "hash": null
     },
     "codex-rs/cli/src/debug_sandbox.rs": {
@@ -4506,6 +4950,15 @@
         "nanos_since_epoch": 464544900
       },
       "size": 3190,
+      "hash": null
+    },
+    "codex-rs/cli/src/doc_cmd.rs": {
+      "path": "codex-rs/cli/src/doc_cmd.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758317249,
+        "nanos_since_epoch": 757930100
+      },
+      "size": 10824,
       "hash": null
     },
     "codex-rs/cli/src/exit_status.rs": {
@@ -4529,20 +4982,20 @@
     "codex-rs/cli/src/login.rs": {
       "path": "codex-rs/cli/src/login.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 464544900
+        "secs_since_epoch": 1758308830,
+        "nanos_since_epoch": 354200600
       },
-      "size": 4617,
+      "size": 7950,
       "hash": null
     },
     "codex-rs/cli/src/main.rs": {
       "path": "codex-rs/cli/src/main.rs",
       "modified_time": {
-        "secs_since_epoch": 1758192570,
-        "nanos_since_epoch": 53875600
+        "secs_since_epoch": 1758316022,
+        "nanos_since_epoch": 939850400
       },
-      "size": 16309,
-      "hash": "63b79cdccdbada020e9692d14bc6d32e7006383cf3a30c66151535c50c51d459"
+      "size": 17262,
+      "hash": "599d0bbcb8394e3b667a96b0781d7f599729de32e09c245bb0e1d04369ab0751"
     },
     "codex-rs/cli/src/mcp/cli.rs": {
       "path": "codex-rs/cli/src/mcp/cli.rs",
@@ -4583,10 +5036,28 @@
     "codex-rs/cli/src/mcp_cmd.rs": {
       "path": "codex-rs/cli/src/mcp_cmd.rs",
       "modified_time": {
-        "secs_since_epoch": 1758218596,
-        "nanos_since_epoch": 175392300
+        "secs_since_epoch": 1758221639,
+        "nanos_since_epoch": 173717900
       },
-      "size": 22213,
+      "size": 22309,
+      "hash": null
+    },
+    "codex-rs/cli/src/orchestrator_cmd.rs": {
+      "path": "codex-rs/cli/src/orchestrator_cmd.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758282657,
+        "nanos_since_epoch": 29601600
+      },
+      "size": 14136,
+      "hash": null
+    },
+    "codex-rs/cli/src/pipeline_cmd.rs": {
+      "path": "codex-rs/cli/src/pipeline_cmd.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758277984,
+        "nanos_since_epoch": 901364800
+      },
+      "size": 10780,
       "hash": null
     },
     "codex-rs/cli/src/proto.rs": {
@@ -4605,6 +5076,15 @@
         "nanos_since_epoch": 843128700
       },
       "size": 5266,
+      "hash": null
+    },
+    "codex-rs/cli/tests/audit_export.rs": {
+      "path": "codex-rs/cli/tests/audit_export.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758224456,
+        "nanos_since_epoch": 24047000
+      },
+      "size": 730,
       "hash": null
     },
     "codex-rs/cli/tests/mcp_add_remove.rs": {
@@ -4763,10 +5243,10 @@
     "codex-rs/core/Cargo.toml": {
       "path": "codex-rs/core/Cargo.toml",
       "modified_time": {
-        "secs_since_epoch": 1758209030,
-        "nanos_since_epoch": 272390900
+        "secs_since_epoch": 1758296165,
+        "nanos_since_epoch": 440177000
       },
-      "size": 2383,
+      "size": 2708,
       "hash": null
     },
     "codex-rs/core/README.md": {
@@ -4790,10 +5270,10 @@
     "codex-rs/core/gpt_5_codex_prompt.md": {
       "path": "codex-rs/core/gpt_5_codex_prompt.md",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 468049900
+        "secs_since_epoch": 1758304711,
+        "nanos_since_epoch": 221951600
       },
-      "size": 9817,
+      "size": 9717,
       "hash": null
     },
     "codex-rs/core/prompt.md": {
@@ -4817,10 +5297,10 @@
     "codex-rs/core/src/auth.rs": {
       "path": "codex-rs/core/src/auth.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 469597200
+        "secs_since_epoch": 1758317386,
+        "nanos_since_epoch": 416559000
       },
-      "size": 22478,
+      "size": 43246,
       "hash": null
     },
     "codex-rs/core/src/bash.rs": {
@@ -4844,10 +5324,10 @@
     "codex-rs/core/src/client.rs": {
       "path": "codex-rs/core/src/client.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 470635700
+        "secs_since_epoch": 1758317326,
+        "nanos_since_epoch": 629843700
       },
-      "size": 43257,
+      "size": 43768,
       "hash": null
     },
     "codex-rs/core/src/client_common.rs": {
@@ -4862,19 +5342,19 @@
     "codex-rs/core/src/codex.rs": {
       "path": "codex-rs/core/src/codex.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 470635700
+        "secs_since_epoch": 1758298236,
+        "nanos_since_epoch": 943906600
       },
-      "size": 143203,
+      "size": 143690,
       "hash": null
     },
     "codex-rs/core/src/codex/compact.rs": {
       "path": "codex-rs/core/src/codex/compact.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 471635300
+        "secs_since_epoch": 1758303251,
+        "nanos_since_epoch": 720595900
       },
-      "size": 12365,
+      "size": 36831,
       "hash": null
     },
     "codex-rs/core/src/codex_conversation.rs": {
@@ -5006,10 +5486,10 @@
     "codex-rs/core/src/exec.rs": {
       "path": "codex-rs/core/src/exec.rs",
       "modified_time": {
-        "secs_since_epoch": 1758219301,
-        "nanos_since_epoch": 705008600
+        "secs_since_epoch": 1758287845,
+        "nanos_since_epoch": 535207500
       },
-      "size": 14537,
+      "size": 21205,
       "hash": null
     },
     "codex-rs/core/src/exec_command/exec_command_params.rs": {
@@ -5123,11 +5603,11 @@
     "codex-rs/core/src/lib.rs": {
       "path": "codex-rs/core/src/lib.rs",
       "modified_time": {
-        "secs_since_epoch": 1758216385,
-        "nanos_since_epoch": 915830300
+        "secs_since_epoch": 1758279274,
+        "nanos_since_epoch": 267851100
       },
-      "size": 3219,
-      "hash": "bdc1533e9ecf156c1167cbffee2c79605c80bc1158c01c7fcbee84797e8ae9c0"
+      "size": 3302,
+      "hash": "a2afeb885536c685743438d70973c2e60634b7830d4629fca760f4d650ff4980"
     },
     "codex-rs/core/src/mcp/health.rs": {
       "path": "codex-rs/core/src/mcp/health.rs",
@@ -5276,10 +5756,10 @@
     "codex-rs/core/src/message_history.rs": {
       "path": "codex-rs/core/src/message_history.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 476652600
+        "secs_since_epoch": 1758287177,
+        "nanos_since_epoch": 747860000
       },
-      "size": 9639,
+      "size": 10030,
       "hash": null
     },
     "codex-rs/core/src/model_family.rs": {
@@ -5318,6 +5798,15 @@
       "size": 43484,
       "hash": null
     },
+    "codex-rs/core/src/orchestrator/mod.rs": {
+      "path": "codex-rs/core/src/orchestrator/mod.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758282657,
+        "nanos_since_epoch": 549529600
+      },
+      "size": 24828,
+      "hash": null
+    },
     "codex-rs/core/src/parse_command.rs": {
       "path": "codex-rs/core/src/parse_command.rs",
       "modified_time": {
@@ -5327,13 +5816,22 @@
       "size": 52719,
       "hash": null
     },
+    "codex-rs/core/src/pipeline/mod.rs": {
+      "path": "codex-rs/core/src/pipeline/mod.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758293741,
+        "nanos_since_epoch": 799498800
+      },
+      "size": 39349,
+      "hash": null
+    },
     "codex-rs/core/src/plan_tool.rs": {
       "path": "codex-rs/core/src/plan_tool.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 477647500
+        "secs_since_epoch": 1758291864,
+        "nanos_since_epoch": 372229700
       },
-      "size": 4051,
+      "size": 4089,
       "hash": null
     },
     "codex-rs/core/src/project_doc.rs": {
@@ -5348,10 +5846,10 @@
     "codex-rs/core/src/resilience/cache.rs": {
       "path": "codex-rs/core/src/resilience/cache.rs",
       "modified_time": {
-        "secs_since_epoch": 1758201913,
-        "nanos_since_epoch": 134617500
+        "secs_since_epoch": 1758229168,
+        "nanos_since_epoch": 414778600
       },
-      "size": 10225,
+      "size": 10444,
       "hash": null
     },
     "codex-rs/core/src/resilience/confidence.rs": {
@@ -5483,10 +5981,10 @@
     "codex-rs/core/src/security/mod.rs": {
       "path": "codex-rs/core/src/security/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758219301,
-        "nanos_since_epoch": 753177200
+        "secs_since_epoch": 1758277120,
+        "nanos_since_epoch": 179348400
       },
-      "size": 10217,
+      "size": 25973,
       "hash": null
     },
     "codex-rs/core/src/shell.rs": {
@@ -5573,8 +6071,8 @@
     "codex-rs/core/src/stellar/state.rs": {
       "path": "codex-rs/core/src/stellar/state.rs",
       "modified_time": {
-        "secs_since_epoch": 1758201979,
-        "nanos_since_epoch": 96388100
+        "secs_since_epoch": 1758234754,
+        "nanos_since_epoch": 374473900
       },
       "size": 22785,
       "hash": null
@@ -5586,6 +6084,24 @@
         "nanos_since_epoch": 815449400
       },
       "size": 3709,
+      "hash": null
+    },
+    "codex-rs/core/src/telemetry.rs": {
+      "path": "codex-rs/core/src/telemetry.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758282657,
+        "nanos_since_epoch": 583758900
+      },
+      "size": 5982,
+      "hash": null
+    },
+    "codex-rs/core/src/telemetry_exporter.rs": {
+      "path": "codex-rs/core/src/telemetry_exporter.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758281934,
+        "nanos_since_epoch": 157785900
+      },
+      "size": 17696,
       "hash": null
     },
     "codex-rs/core/src/terminal.rs": {
@@ -5762,28 +6278,28 @@
     "codex-rs/core/tests/suite/client.rs": {
       "path": "codex-rs/core/tests/suite/client.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 484749200
+        "secs_since_epoch": 1758306501,
+        "nanos_since_epoch": 18779400
       },
-      "size": 37892,
+      "size": 36882,
       "hash": null
     },
     "codex-rs/core/tests/suite/compact.rs": {
       "path": "codex-rs/core/tests/suite/compact.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 484749200
+        "secs_since_epoch": 1758302998,
+        "nanos_since_epoch": 415489200
       },
-      "size": 31280,
+      "size": 30040,
       "hash": null
     },
     "codex-rs/core/tests/suite/compact_resume_fork.rs": {
       "path": "codex-rs/core/tests/suite/compact_resume_fork.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 485752000
+        "secs_since_epoch": 1758303010,
+        "nanos_since_epoch": 195094900
       },
-      "size": 27531,
+      "size": 27952,
       "hash": null
     },
     "codex-rs/core/tests/suite/exec.rs": {
@@ -6398,6 +6914,78 @@
       "size": 118,
       "hash": null
     },
+    "codex-rs/gui/Cargo.toml": {
+      "path": "codex-rs/gui/Cargo.toml",
+      "modified_time": {
+        "secs_since_epoch": 1758310371,
+        "nanos_since_epoch": 402549600
+      },
+      "size": 815,
+      "hash": null
+    },
+    "codex-rs/gui/src/backend/codex.rs": {
+      "path": "codex-rs/gui/src/backend/codex.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758313499,
+        "nanos_since_epoch": 347684000
+      },
+      "size": 18996,
+      "hash": null
+    },
+    "codex-rs/gui/src/backend/mod.rs": {
+      "path": "codex-rs/gui/src/backend/mod.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758313426,
+        "nanos_since_epoch": 339746500
+      },
+      "size": 10830,
+      "hash": null
+    },
+    "codex-rs/gui/src/lib.rs": {
+      "path": "codex-rs/gui/src/lib.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758313426,
+        "nanos_since_epoch": 339746500
+      },
+      "size": 1407,
+      "hash": "ff95cb47f459516c5544b26b600f07bec1ff3f9ef027e60c7889a03760e9a6a9"
+    },
+    "codex-rs/gui/src/main.rs": {
+      "path": "codex-rs/gui/src/main.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758313323,
+        "nanos_since_epoch": 263173400
+      },
+      "size": 762,
+      "hash": "74d74e633b79c580a5dade2011c220bdba75bb76b9f0ef563a3f261477350041"
+    },
+    "codex-rs/gui/src/runtime/mod.rs": {
+      "path": "codex-rs/gui/src/runtime/mod.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758312025,
+        "nanos_since_epoch": 959860200
+      },
+      "size": 1301,
+      "hash": null
+    },
+    "codex-rs/gui/src/ui/mod.rs": {
+      "path": "codex-rs/gui/src/ui/mod.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758314074,
+        "nanos_since_epoch": 918255800
+      },
+      "size": 16347,
+      "hash": null
+    },
+    "codex-rs/gui/tests/smoke.rs": {
+      "path": "codex-rs/gui/tests/smoke.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758313426,
+        "nanos_since_epoch": 361406200
+      },
+      "size": 809,
+      "hash": null
+    },
     "codex-rs/linux-sandbox/Cargo.toml": {
       "path": "codex-rs/linux-sandbox/Cargo.toml",
       "modified_time": {
@@ -6518,10 +7106,10 @@
     "codex-rs/login/src/server.rs": {
       "path": "codex-rs/login/src/server.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 498798000
+        "secs_since_epoch": 1758293745,
+        "nanos_since_epoch": 391212500
       },
-      "size": 20789,
+      "size": 21115,
       "hash": null
     },
     "codex-rs/login/tests/all.rs": {
@@ -6536,10 +7124,10 @@
     "codex-rs/login/tests/suite/login_server_e2e.rs": {
       "path": "codex-rs/login/tests/suite/login_server_e2e.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 499800600
+        "secs_since_epoch": 1758306274,
+        "nanos_since_epoch": 261758100
       },
-      "size": 9491,
+      "size": 9547,
       "hash": null
     },
     "codex-rs/login/tests/suite/mod.rs": {
@@ -6599,10 +7187,10 @@
     "codex-rs/mcp-server/src/codex_message_processor.rs": {
       "path": "codex-rs/mcp-server/src/codex_message_processor.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 501112600
+        "secs_since_epoch": 1758307018,
+        "nanos_since_epoch": 37551300
       },
-      "size": 56468,
+      "size": 55019,
       "hash": null
     },
     "codex-rs/mcp-server/src/codex_tool_config.rs": {
@@ -6824,10 +7412,10 @@
     "codex-rs/mcp-server/tests/suite/login.rs": {
       "path": "codex-rs/mcp-server/tests/suite/login.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 505615300
+        "secs_since_epoch": 1758306501,
+        "nanos_since_epoch": 419035500
       },
-      "size": 5259,
+      "size": 5168,
       "hash": null
     },
     "codex-rs/mcp-server/tests/suite/mod.rs": {
@@ -6869,10 +7457,10 @@
     "codex-rs/mcp-server/tests/suite/user_info.rs": {
       "path": "codex-rs/mcp-server/tests/suite/user_info.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 506618000
+        "secs_since_epoch": 1758293786,
+        "nanos_since_epoch": 998976800
       },
-      "size": 2810,
+      "size": 3110,
       "hash": null
     },
     "codex-rs/mcp-types/Cargo.toml": {
@@ -7181,13 +7769,22 @@
       "size": 168,
       "hash": null
     },
+    "codex-rs/todo.completed.machine.md": {
+      "path": "codex-rs/todo.completed.machine.md",
+      "modified_time": {
+        "secs_since_epoch": 1758316546,
+        "nanos_since_epoch": 547221000
+      },
+      "size": 4492,
+      "hash": null
+    },
     "codex-rs/todo.machine.md": {
       "path": "codex-rs/todo.machine.md",
       "modified_time": {
-        "secs_since_epoch": 1758119958,
-        "nanos_since_epoch": 739660700
+        "secs_since_epoch": 1758316533,
+        "nanos_since_epoch": 323967500
       },
-      "size": 2916,
+      "size": 9553,
       "hash": null
     },
     "codex-rs/tui/Cargo.toml": {
@@ -7211,10 +7808,10 @@
     "codex-rs/tui/src/app.rs": {
       "path": "codex-rs/tui/src/app.rs",
       "modified_time": {
-        "secs_since_epoch": 1758197938,
-        "nanos_since_epoch": 539333900
+        "secs_since_epoch": 1758316189,
+        "nanos_since_epoch": 531573700
       },
-      "size": 30398,
+      "size": 48352,
       "hash": null
     },
     "codex-rs/tui/src/app_backtrack.rs": {
@@ -7229,10 +7826,10 @@
     "codex-rs/tui/src/app_event.rs": {
       "path": "codex-rs/tui/src/app_event.rs",
       "modified_time": {
-        "secs_since_epoch": 1758117647,
-        "nanos_since_epoch": 819862500
+        "secs_since_epoch": 1758314723,
+        "nanos_since_epoch": 570981500
       },
-      "size": 2843,
+      "size": 2985,
       "hash": null
     },
     "codex-rs/tui/src/app_event_sender.rs": {
@@ -7274,10 +7871,10 @@
     "codex-rs/tui/src/bottom_pane/chat_composer.rs": {
       "path": "codex-rs/tui/src/bottom_pane/chat_composer.rs",
       "modified_time": {
-        "secs_since_epoch": 1758216232,
-        "nanos_since_epoch": 45395100
+        "secs_since_epoch": 1758315663,
+        "nanos_since_epoch": 855805000
       },
-      "size": 95824,
+      "size": 98282,
       "hash": null
     },
     "codex-rs/tui/src/bottom_pane/chat_composer_history.rs": {
@@ -7319,10 +7916,10 @@
     "codex-rs/tui/src/bottom_pane/mod.rs": {
       "path": "codex-rs/tui/src/bottom_pane/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758117660,
-        "nanos_since_epoch": 314555600
+        "secs_since_epoch": 1758315686,
+        "nanos_since_epoch": 923595200
       },
-      "size": 26524,
+      "size": 26762,
       "hash": null
     },
     "codex-rs/tui/src/bottom_pane/paste_burst.rs": {
@@ -7373,10 +7970,10 @@
     "codex-rs/tui/src/chatwidget.rs": {
       "path": "codex-rs/tui/src/chatwidget.rs",
       "modified_time": {
-        "secs_since_epoch": 1758201916,
-        "nanos_since_epoch": 312124600
+        "secs_since_epoch": 1758315713,
+        "nanos_since_epoch": 660930700
       },
-      "size": 62937,
+      "size": 63345,
       "hash": null
     },
     "codex-rs/tui/src/chatwidget/agent.rs": {
@@ -7469,6 +8066,15 @@
       "size": 1587,
       "hash": null
     },
+    "codex-rs/tui/src/file_explorer.rs": {
+      "path": "codex-rs/tui/src/file_explorer.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758316371,
+        "nanos_since_epoch": 818868100
+      },
+      "size": 21732,
+      "hash": null
+    },
     "codex-rs/tui/src/file_search.rs": {
       "path": "codex-rs/tui/src/file_search.rs",
       "modified_time": {
@@ -7499,10 +8105,10 @@
     "codex-rs/tui/src/history_cell.rs": {
       "path": "codex-rs/tui/src/history_cell.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 572176100
+        "secs_since_epoch": 1758306820,
+        "nanos_since_epoch": 603772300
       },
-      "size": 78060,
+      "size": 78069,
       "hash": null
     },
     "codex-rs/tui/src/insert_history.rs": {
@@ -7526,11 +8132,11 @@
     "codex-rs/tui/src/lib.rs": {
       "path": "codex-rs/tui/src/lib.rs",
       "modified_time": {
-        "secs_since_epoch": 1758195593,
-        "nanos_since_epoch": 141101400
+        "secs_since_epoch": 1758314933,
+        "nanos_since_epoch": 57840200
       },
-      "size": 22370,
-      "hash": "3c287c5996ff81e04a45d0cf65826db734686cadee5afbeb6f26d29b0dd8f9c2"
+      "size": 22816,
+      "hash": "ee432dd753b7a25514a9b184d5c5edcc7c0890182169854857e9b285cac55214"
     },
     "codex-rs/tui/src/live_wrap.rs": {
       "path": "codex-rs/tui/src/live_wrap.rs",
@@ -7586,22 +8192,31 @@
       "size": 26667,
       "hash": null
     },
+    "codex-rs/tui/src/mcp/file_browser.rs": {
+      "path": "codex-rs/tui/src/mcp/file_browser.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758287313,
+        "nanos_since_epoch": 10165600
+      },
+      "size": 13165,
+      "hash": null
+    },
     "codex-rs/tui/src/mcp/manager_view.rs": {
       "path": "codex-rs/tui/src/mcp/manager_view.rs",
       "modified_time": {
-        "secs_since_epoch": 1758120084,
-        "nanos_since_epoch": 165622500
+        "secs_since_epoch": 1758288428,
+        "nanos_since_epoch": 830597000
       },
-      "size": 17367,
+      "size": 20519,
       "hash": null
     },
     "codex-rs/tui/src/mcp/mod.rs": {
       "path": "codex-rs/tui/src/mcp/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758119551,
-        "nanos_since_epoch": 497766100
+        "secs_since_epoch": 1758287267,
+        "nanos_since_epoch": 439091900
       },
-      "size": 346,
+      "size": 363,
       "hash": null
     },
     "codex-rs/tui/src/mcp/types.rs": {
@@ -7616,10 +8231,10 @@
     "codex-rs/tui/src/mcp/wizard_view.rs": {
       "path": "codex-rs/tui/src/mcp/wizard_view.rs",
       "modified_time": {
-        "secs_since_epoch": 1758207358,
-        "nanos_since_epoch": 353073400
+        "secs_since_epoch": 1758286305,
+        "nanos_since_epoch": 310488100
       },
-      "size": 55704,
+      "size": 58836,
       "hash": null
     },
     "codex-rs/tui/src/new_model_popup.rs": {
@@ -7748,6 +8363,15 @@
       "size": 2930,
       "hash": null
     },
+    "codex-rs/tui/src/status_bar.rs": {
+      "path": "codex-rs/tui/src/status_bar.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758309232,
+        "nanos_since_epoch": 176324600
+      },
+      "size": 6984,
+      "hash": null
+    },
     "codex-rs/tui/src/status_indicator_widget.rs": {
       "path": "codex-rs/tui/src/status_indicator_widget.rs",
       "modified_time": {
@@ -7769,8 +8393,8 @@
     "codex-rs/tui/src/stellar/keymap.rs": {
       "path": "codex-rs/tui/src/stellar/keymap.rs",
       "modified_time": {
-        "secs_since_epoch": 1758197938,
-        "nanos_since_epoch": 639135500
+        "secs_since_epoch": 1758238285,
+        "nanos_since_epoch": 907177300
       },
       "size": 9153,
       "hash": null
@@ -7787,19 +8411,19 @@
     "codex-rs/tui/src/stellar/tests.rs": {
       "path": "codex-rs/tui/src/stellar/tests.rs",
       "modified_time": {
-        "secs_since_epoch": 1758201916,
-        "nanos_since_epoch": 373693700
+        "secs_since_epoch": 1758238492,
+        "nanos_since_epoch": 824454700
       },
-      "size": 2011,
+      "size": 2482,
       "hash": null
     },
     "codex-rs/tui/src/stellar/view.rs": {
       "path": "codex-rs/tui/src/stellar/view.rs",
       "modified_time": {
-        "secs_since_epoch": 1758202978,
-        "nanos_since_epoch": 768324900
+        "secs_since_epoch": 1758238492,
+        "nanos_since_epoch": 827915700
       },
-      "size": 9795,
+      "size": 11312,
       "hash": null
     },
     "codex-rs/tui/src/streaming/controller.rs": {
@@ -7922,10 +8546,19 @@
     "codex-rs/tui/tests/suite/mod.rs": {
       "path": "codex-rs/tui/tests/suite/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 595870900
+        "secs_since_epoch": 1758279705,
+        "nanos_since_epoch": 143196300
       },
-      "size": 163,
+      "size": 188,
+      "hash": null
+    },
+    "codex-rs/tui/tests/suite/overlay_investigate_flow.rs": {
+      "path": "codex-rs/tui/tests/suite/overlay_investigate_flow.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758281855,
+        "nanos_since_epoch": 681050600
+      },
+      "size": 1860,
       "hash": null
     },
     "codex-rs/tui/tests/suite/status_indicator.rs": {
@@ -7989,6 +8622,15 @@
         "nanos_since_epoch": 597399500
       },
       "size": 3116,
+      "hash": null
+    },
+    "docs/codex-gui.md": {
+      "path": "docs/codex-gui.md",
+      "modified_time": {
+        "secs_since_epoch": 1758316504,
+        "nanos_since_epoch": 505590200
+      },
+      "size": 8781,
       "hash": null
     },
     "docs/config.md": {
@@ -8129,8 +8771,8 @@
     "docs/future/stellar/m1-core-plan.md": {
       "path": "docs/future/stellar/m1-core-plan.md",
       "modified_time": {
-        "secs_since_epoch": 1758193732,
-        "nanos_since_epoch": 307125500
+        "secs_since_epoch": 1758234761,
+        "nanos_since_epoch": 973557600
       },
       "size": 10328,
       "hash": null
@@ -8153,13 +8795,22 @@
       "size": 5143,
       "hash": null
     },
+    "docs/future/stellar/m3-security-validation.md": {
+      "path": "docs/future/stellar/m3-security-validation.md",
+      "modified_time": {
+        "secs_since_epoch": 1758224556,
+        "nanos_since_epoch": 333580700
+      },
+      "size": 2499,
+      "hash": null
+    },
     "docs/future/stellar/metrics-baseline.md": {
       "path": "docs/future/stellar/metrics-baseline.md",
       "modified_time": {
-        "secs_since_epoch": 1758209167,
-        "nanos_since_epoch": 656238000
+        "secs_since_epoch": 1758282641,
+        "nanos_since_epoch": 152233200
       },
-      "size": 1461,
+      "size": 3791,
       "hash": null
     },
     "docs/future/stellar/review-log.md": {
@@ -8183,19 +8834,19 @@
     "docs/getting-started.md": {
       "path": "docs/getting-started.md",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 598401900
+        "secs_since_epoch": 1758316465,
+        "nanos_since_epoch": 129107200
       },
-      "size": 5265,
+      "size": 7750,
       "hash": null
     },
     "docs/install.md": {
       "path": "docs/install.md",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 598401900
+        "secs_since_epoch": 1758288969,
+        "nanos_since_epoch": 89056100
       },
-      "size": 1550,
+      "size": 2126,
       "hash": null
     },
     "docs/license.md": {
@@ -8297,6 +8948,15 @@
       "size": 5371,
       "hash": null
     },
+    "docs/stellar-quickstart.md": {
+      "path": "docs/stellar-quickstart.md",
+      "modified_time": {
+        "secs_since_epoch": 1758312502,
+        "nanos_since_epoch": 228106400
+      },
+      "size": 7255,
+      "hash": null
+    },
     "docs/zdr.md": {
       "path": "docs/zdr.md",
       "modified_time": {
@@ -8304,6 +8964,132 @@
         "nanos_since_epoch": 599402000
       },
       "size": 201,
+      "hash": null
+    },
+    "embeddinggemma-300m/1_Pooling/config.json": {
+      "path": "embeddinggemma-300m/1_Pooling/config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127933,
+        "nanos_since_epoch": 714219800
+      },
+      "size": 312,
+      "hash": null
+    },
+    "embeddinggemma-300m/2_Dense/config.json": {
+      "path": "embeddinggemma-300m/2_Dense/config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127933,
+        "nanos_since_epoch": 716220300
+      },
+      "size": 134,
+      "hash": null
+    },
+    "embeddinggemma-300m/3_Dense/config.json": {
+      "path": "embeddinggemma-300m/3_Dense/config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127933,
+        "nanos_since_epoch": 704669800
+      },
+      "size": 134,
+      "hash": null
+    },
+    "embeddinggemma-300m/README.md": {
+      "path": "embeddinggemma-300m/README.md",
+      "modified_time": {
+        "secs_since_epoch": 1757127666,
+        "nanos_since_epoch": 720775200
+      },
+      "size": 16656,
+      "hash": null
+    },
+    "embeddinggemma-300m/added_tokens.json": {
+      "path": "embeddinggemma-300m/added_tokens.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127933,
+        "nanos_since_epoch": 705661700
+      },
+      "size": 35,
+      "hash": null
+    },
+    "embeddinggemma-300m/config.json": {
+      "path": "embeddinggemma-300m/config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127933,
+        "nanos_since_epoch": 711826900
+      },
+      "size": 1488,
+      "hash": null
+    },
+    "embeddinggemma-300m/config_sentence_transformers.json": {
+      "path": "embeddinggemma-300m/config_sentence_transformers.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127934,
+        "nanos_since_epoch": 103339300
+      },
+      "size": 997,
+      "hash": null
+    },
+    "embeddinggemma-300m/generation_config.json": {
+      "path": "embeddinggemma-300m/generation_config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127934,
+        "nanos_since_epoch": 84327400
+      },
+      "size": 133,
+      "hash": null
+    },
+    "embeddinggemma-300m/modules.json": {
+      "path": "embeddinggemma-300m/modules.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127934,
+        "nanos_since_epoch": 88327400
+      },
+      "size": 573,
+      "hash": null
+    },
+    "embeddinggemma-300m/sentence_bert_config.json": {
+      "path": "embeddinggemma-300m/sentence_bert_config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127934,
+        "nanos_since_epoch": 83327500
+      },
+      "size": 58,
+      "hash": null
+    },
+    "embeddinggemma-300m/special_tokens_map.json": {
+      "path": "embeddinggemma-300m/special_tokens_map.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127934,
+        "nanos_since_epoch": 99339500
+      },
+      "size": 662,
+      "hash": null
+    },
+    "embeddinggemma-300m/tokenizer.json": {
+      "path": "embeddinggemma-300m/tokenizer.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127939,
+        "nanos_since_epoch": 38311900
+      },
+      "size": 33385008,
+      "hash": null
+    },
+    "embeddinggemma-300m/tokenizer_config.json": {
+      "path": "embeddinggemma-300m/tokenizer_config.json",
+      "modified_time": {
+        "secs_since_epoch": 1757127935,
+        "nanos_since_epoch": 886005000
+      },
+      "size": 1155346,
+      "hash": null
+    },
+    "hook-input-debug.json": {
+      "path": "hook-input-debug.json",
+      "modified_time": {
+        "secs_since_epoch": 1758317386,
+        "nanos_since_epoch": 317475900
+      },
+      "size": 55446,
       "hash": null
     },
     "mcp-ui.md": {
@@ -8369,6 +9155,51 @@
       "size": 1592,
       "hash": null
     },
+    "scripts/docsearch/__init__.py": {
+      "path": "scripts/docsearch/__init__.py",
+      "modified_time": {
+        "secs_since_epoch": 1758315767,
+        "nanos_since_epoch": 492534000
+      },
+      "size": 114,
+      "hash": null
+    },
+    "scripts/docsearch/common.py": {
+      "path": "scripts/docsearch/common.py",
+      "modified_time": {
+        "secs_since_epoch": 1758317787,
+        "nanos_since_epoch": 495765400
+      },
+      "size": 5036,
+      "hash": null
+    },
+    "scripts/docsearch/index.py": {
+      "path": "scripts/docsearch/index.py",
+      "modified_time": {
+        "secs_since_epoch": 1758317577,
+        "nanos_since_epoch": 87442100
+      },
+      "size": 3292,
+      "hash": null
+    },
+    "scripts/docsearch/query.py": {
+      "path": "scripts/docsearch/query.py",
+      "modified_time": {
+        "secs_since_epoch": 1758317743,
+        "nanos_since_epoch": 652490200
+      },
+      "size": 3217,
+      "hash": null
+    },
+    "scripts/docsearch/tests/test_chunking.py": {
+      "path": "scripts/docsearch/tests/test_chunking.py",
+      "modified_time": {
+        "secs_since_epoch": 1758315855,
+        "nanos_since_epoch": 430319500
+      },
+      "size": 482,
+      "hash": null
+    },
     "scripts/readme_toc.py": {
       "path": "scripts/readme_toc.py",
       "modified_time": {
@@ -8381,16 +9212,16 @@
     "todo.md": {
       "path": "todo.md",
       "modified_time": {
-        "secs_since_epoch": 1758220188,
-        "nanos_since_epoch": 611879600
+        "secs_since_epoch": 1758280780,
+        "nanos_since_epoch": 393607500
       },
-      "size": 16458,
+      "size": 18490,
       "hash": null
     }
   },
-  "cache_timestamp": 1758220780,
+  "cache_timestamp": 1758317835,
   "last_modified": {
-    "secs_since_epoch": 1758220780,
-    "nanos_since_epoch": 24520600
+    "secs_since_epoch": 1758317835,
+    "nanos_since_epoch": 69818100
   }
 }

@@ -16,6 +16,7 @@
 
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use std::io::Result;
 use std::io::Write;
 use std::path::PathBuf;
@@ -31,6 +32,7 @@ use crate::config::Config;
 use crate::config_types::HistoryPersistence;
 
 use codex_protocol::mcp_protocol::ConversationId;
+use fs2::FileExt;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
@@ -114,22 +116,22 @@ pub(crate) async fn append_entry(
     tokio::task::spawn_blocking(move || -> Result<()> {
         // Retry a few times to avoid indefinite blocking when contended.
         for _ in 0..MAX_RETRIES {
-            match history_file.try_lock() {
+            match FileExt::try_lock_exclusive(&history_file) {
                 Ok(()) => {
-                    // While holding the exclusive lock, write the full line.
                     history_file.write_all(line.as_bytes())?;
                     history_file.flush()?;
+                    FileExt::unlock(&history_file)?;
                     return Ok(());
                 }
-                Err(std::fs::TryLockError::WouldBlock) => {
+                Err(err) if err.kind() == ErrorKind::WouldBlock => {
                     std::thread::sleep(RETRY_SLEEP);
                 }
-                Err(e) => return Err(e.into()),
+                Err(err) => return Err(err),
             }
         }
 
         Err(std::io::Error::new(
-            std::io::ErrorKind::WouldBlock,
+            ErrorKind::WouldBlock,
             "could not acquire exclusive lock on history file after multiple attempts",
         ))
     })
@@ -216,38 +218,46 @@ pub(crate) fn lookup(log_id: u64, offset: usize, config: &Config) -> Option<Hist
     // Open & lock file for reading using a shared lock.
     // Retry a few times to avoid indefinite blocking.
     for _ in 0..MAX_RETRIES {
-        let lock_result = file.try_lock_shared();
-
-        match lock_result {
+        match FileExt::try_lock_shared(&file) {
             Ok(()) => {
-                let reader = BufReader::new(&file);
-                for (idx, line_res) in reader.lines().enumerate() {
-                    let line = match line_res {
-                        Ok(l) => l,
-                        Err(e) => {
-                            tracing::warn!(error = %e, "failed to read line from history file");
-                            return None;
-                        }
-                    };
-
-                    if idx == offset {
-                        match serde_json::from_str::<HistoryEntry>(&line) {
-                            Ok(entry) => return Some(entry),
+                let result = {
+                    let reader = BufReader::new(&file);
+                    let mut found = None;
+                    for (idx, line_res) in reader.lines().enumerate() {
+                        let line = match line_res {
+                            Ok(l) => l,
                             Err(e) => {
-                                tracing::warn!(error = %e, "failed to parse history entry");
-                                return None;
+                                tracing::warn!(error = %e, "failed to read line from history file");
+                                found = None;
+                                break;
                             }
+                        };
+
+                        if idx == offset {
+                            match serde_json::from_str::<HistoryEntry>(&line) {
+                                Ok(entry) => {
+                                    found = Some(entry);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(error = %e, "failed to parse history entry");
+                                    found = None;
+                                }
+                            }
+                            break;
                         }
                     }
+                    found
+                };
+                if let Err(err) = FileExt::unlock(&file) {
+                    tracing::warn!(error = %err, "failed to unlock history file");
                 }
-                // Not found at requested offset.
-                return None;
+                return result;
             }
-            Err(std::fs::TryLockError::WouldBlock) => {
+            Err(err) if err.kind() == ErrorKind::WouldBlock => {
                 std::thread::sleep(RETRY_SLEEP);
             }
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to acquire shared lock on history file");
+            Err(err) => {
+                tracing::warn!(error = %err, "failed to acquire shared lock on history file");
                 return None;
             }
         }

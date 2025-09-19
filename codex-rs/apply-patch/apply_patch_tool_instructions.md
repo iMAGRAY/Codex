@@ -73,3 +73,30 @@ You can invoke apply_patch like:
 ```
 shell {"command":["apply_patch","*** Begin Patch\n*** Add File: hello.txt\n+Hello, world!\n*** End Patch\n"]}
 ```
+
+
+### Command-line options
+
+The Rust CLI now understands a richer workflow around the same patch format:
+
+- `--interactive` / `--no-interactive` — force or disable the TTY picker. In interactive mode you will review every hunk (and for multi-chunk updates choose individual chunks). Press `abort` or `q` to cancel the run.
+- `--dry-run` — parse and preview the patch, print a structured summary (`Dry run summary:`), but never touch the filesystem or the undo history.
+- `-y` / `--yes` — skip confirmations in interactive mode. Non-interactive invocations default to "apply" without prompting.
+- `--preview` / `--no-preview` — force a diff preview or suppress it. By default previews are shown for interactive sessions and dry-runs.
+- `--run-after <cmd>` — run shell commands (one per flag occurrence) after a successful apply. Each command runs in the patch working directory and must exit with status 0.
+- `--undo-last` — revert the last successful patch in the current working tree. The tool keeps an undo record in `.codex/apply_patch_history.json` and refuses to undo if files no longer match the recorded contents.
+- `-q` / `--quiet` and `--detailed-summary` — control how much apply_patch prints after a run.
+
+### Summaries and undo safety
+
+Instead of the old "Success. Updated the following files" banner, the CLI now prints structured summaries:
+
+```
+Applied changes:
+  A path/to/file.rs
+  M another/file.rs -> renamed/file.rs
+```
+
+Detailed mode also reports line counts. Dry runs use `Dry run summary:`. When undoing, the summary reflects the inverse operations (`D` for a file that gets removed again, etc.).
+
+Undo uses exact content hashes: if the on-disk contents changed after the patch was applied, `--undo-last` aborts with a verification error so you do not clobber unrelated edits.

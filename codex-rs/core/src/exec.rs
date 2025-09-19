@@ -146,6 +146,7 @@ pub async fn process_exec_tool_call(
             #[allow(unused_mut)]
             let mut timed_out = raw_output.timed_out;
 
+            #[allow(unused_mut)]
             let mut resource_notice: Option<String> = None;
 
             #[cfg(target_family = "unix")]

@@ -1,11 +1,10 @@
 ---
 source: tui/src/mcp/wizard_view.rs
-assertion_line: 1582
 expression: render(&view)
 ---
 ┌Source context──────────────────────────────────────────────────────────────┐
 │Provide the MCP server source path so Codex can analyse its structure.      │
-│                                                                            │
+│Press 'f' to browse the workspace.                                          │
 │                                                                            │
 │                                                                            │
 │                                                                            │
@@ -15,9 +14,15 @@ expression: render(&view)
 │Template                    anthropic/cli                                   │
 │Source path                 (optional)                                      │
 │Name                        anthropic-mcp                                   │
+│Command                     anthropic-mcp                                   │
+│Args                        --serve --port 8080                             │
+│Env                         1 entry                                         │
+│Description                 Anthropic MCP bridge                            │
+│Tags                        anthropic, beta                                 │
+│Startup timeout (ms)        15000                                           │
 └────────────────────────────────────────────────────────────────────────────┘
 ┌Help────────────────────────────────────────────────────────────────────────┐
 │Command must not be empty                                                   │
-│Keys: ↑/↓ move  Enter edit/select  s summary  Esc close                     │
+│Keys: ↑/↓ move  f browse source  Enter edit/select  s summary  Esc close    │
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘

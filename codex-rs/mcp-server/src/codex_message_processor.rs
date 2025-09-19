@@ -11,7 +11,7 @@ use codex_core::NewConversation;
 use codex_core::RolloutRecorder;
 use codex_core::SessionMeta;
 use codex_core::auth::CLIENT_ID;
-use codex_core::auth::get_auth_file;
+use codex_core::auth::find_auth_file;
 use codex_core::auth::login_with_api_key;
 use codex_core::auth::try_read_auth_json;
 use codex_core::config::Config;
@@ -506,11 +506,11 @@ impl CodexMessageProcessor {
 
     async fn get_user_info(&self, request_id: RequestId) {
         // Read alleged user email from auth.json (best-effort; not verified).
-        let auth_path = get_auth_file(&self.config.codex_home);
-        let alleged_user_email = match try_read_auth_json(&auth_path) {
-            Ok(auth) => auth.tokens.and_then(|t| t.id_token.email),
-            Err(_) => None,
-        };
+        let alleged_user_email =
+            match find_auth_file(&self.config.codex_home).map(|path| try_read_auth_json(&path)) {
+                Some(Ok(auth)) => auth.tokens.and_then(|t| t.id_token.email),
+                _ => None,
+            };
 
         let response = UserInfoResponse { alleged_user_email };
         self.outgoing.send_response(request_id, response).await;

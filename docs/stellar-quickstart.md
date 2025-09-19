@@ -57,3 +57,24 @@ Trace: Continuous Quality Safeguards · REQ-ACC-01/REQ-OPS-01 alignment with Wor
 ## Validate
 - Архивируйте вывод triage в `docs/future/stellar/metrics-baseline.md` (раздел Continuous Quality) и отметьте чекбокс в `todo.md`.
 - При статусе Yellow/Red запланируйте `codex orchestrator investigate` и добавьте action items в weekly review.
+
+# Stellar Quickstart — Desktop GUI Preview
+
+Trace: REQ-UX-01, REQ-ACC-01, REQ-DX-01. Инкрементирует Workstream 0→1 для десктопного канала.
+
+## Plan
+- Убедитесь, что `rustup` настроен на toolchain 2024 (`rustup show active-toolchain`).
+- Подготовьте чистую рабочую директорию (`git status` без незакоммиченных правок) и отключите внешние окна — eframe запускает нативное приложение.
+- Выполните `cargo run -p codex-gui -- --dry-run-ui` — проверяет, что runtime и конфигурация собираются без открытия окна.
+- Убедитесь, что авторизация Codex активна (`codex login status` или `codex login` при необходимости).
+
+## Build
+- `cargo run -p codex-gui` — запускает белый минималистичный интерфейс с live-подключением к Codex.
+- В интерфейсе создайте/откройте сессию, отправьте промпт (⌘/Ctrl + Enter) и дождитесь потокового ответа ассистента.
+- Запустите команду из подсказки (например, попросите проанализировать `git status`) и убедитесь, что stdout/stderr появляются в истории с пометками.
+- Проверьте визуальные элементы: белый фон, подсказки горячих клавиш, статус-баннеры, плавные карточки.
+
+## Validate
+- `cargo test -p codex-gui` (smoke `tests/smoke.rs` + backend unit).
+- `cargo fmt -p codex-gui` (форматирование перед PR) или `just fmt` для всего workspace.
+- На окружении Codex CLI команды `cargo` могут завершаться сигналом; при локальной проверке убедитесь, что окно поднимается < 200 мс, RAM < 512 МБ, а команды/ответы транслируются без задержек > 1 с.

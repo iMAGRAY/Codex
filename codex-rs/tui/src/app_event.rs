@@ -1,6 +1,7 @@
 use codex_core::protocol::ConversationPathResponseEvent;
 use codex_core::protocol::Event;
 use codex_file_search::FileMatch;
+use std::path::PathBuf;
 
 use crate::history_cell::HistoryCell;
 use crate::mcp::McpWizardDraft;
@@ -89,5 +90,10 @@ pub(crate) enum AppEvent {
     /// Remove a configured MCP server.
     RemoveMcpServer {
         name: String,
+    },
+
+    /// Request to open a file or directory from the explorer pane.
+    OpenFilePath {
+        path: PathBuf,
     },
 }

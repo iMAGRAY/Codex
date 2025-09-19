@@ -184,9 +184,9 @@ Ship a feature-flagged MCP wizard and dashboard that meet these success criteria
   title: Apply Patch Interactive UX Revamp
   type: feature
   status: blocked
-  blocked_reason: rustc aborts with ENOMEM inside sandbox; cannot run cargo fmt/test yet
+  blocked_reason: workspace `cargo fmt` fails on Windows because existing TUI files contain bare CR doc comments; apply_patch crate formats cleanly once formatting scope is limited.
   blocked_recommendations:
-    - bump sandbox memory limit or rerun outside sandbox, then run `cargo fmt` and `cargo test -p codex-apply-patch`
+    - run `cargo fmt --package codex-apply-patch` (or fix CRs in `tui/src/bottom_pane/chat_composer.rs`) before full-workspace formatting
   priority: P0
   size_points: 21
   scope_paths:

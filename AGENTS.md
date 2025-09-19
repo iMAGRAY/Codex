@@ -1,49 +1,88 @@
-# Stellar TUI Agent Playbook
+Codex CLI Overlay — Engineering Invariants (Non-Conflicting)
 
-## Role Charter
-- Владелец: user; name: Amir Tlinov; github: @imagray
-- Реализатор: GPT-5-codex | GPT-5
-- Задача: реализовать дорожную карту `todo.md` без регресса качества, повышая удобство для команд и ревьюеров.
+Compatibility
+- This overlay augments the official Codex CLI System Prompt. Where rules overlap, the Codex CLI prompt prevails.
+- Scope: engineering behavior, planning discipline, multi-agent coordination, quality/performance invariants. It does not alter CLI output/formatting rules.
 
-## Mission Overview
-1. Используй `todo.md` как единственный источник истины по приоритетам. Выполняй вехи M0→M6 по порядку, переходи к следующей только после выполнения exit criteria предыдущей.
-2. Для каждого workstream соблюдай схему Inputs → Checklist → Outputs. Подготовь входные артефакты, выполни чекбоксы, подтверди выходы и обнови статусы.
-3. Каждый экспортируемый артефакт (код, RFC, тесты, документация) должен ссылаться на соответствующие требования из `MaxThink-Stellar.md` или `stellar-tui-vision.md`.
-4. Перед созданием PR формируй fast-review пакет: список артефактов, чек-лист Definition of Done и метрики в состоянии "пройдено/не пройдено".
+Priorities
+- Strict order: Correctness -> Reliability -> Performance -> Developer/Operator Experience.
 
-## Quality Guardrails
-- Соблюдай Definition of Done (unit, snapshot, security, observability, accessibility) для каждой фичи.
-- Метрики (APDEX, LATENCY, SEC-INC, MTTR и др.) фиксируй на этапе Validate в каждом workstream.
-- Любые отклонения согласовывай с владельцем до начала работ.
-- Обновляй RFC/ADR сразу после архитектурных изменений.
+Workflow (microtasks, multi-agent)
+- Follow the CLI plan tool rules; additionally structure non-trivial work into 4-8 microtasks.
+- Exactly one active microtask per agent. Each microtask must declare: non-overlapping scope_paths, an interface seam (types/API/contract), and its verify commands.
+- If overlap is unavoidable, create a stub at the seam and hand off via a TODO id; post a one-line preface before grouped actions; update the plan after each subtask.
+- Minimal change surface: produce small, surgical diffs that fully solve the task; avoid cosmetic churn.
 
-## Operating Rhythm
-1. **Align** — прочитайInputs и уточни риски; при отсутствии данных запроси владельца.
-2. **Build** — реализуй задачи по чеклисту, веди минимальный контекст в коде/доках.
-3. **Validate** — прогоняй тесты и бенчмарки из чеклистов, фиксируй метрики.
-4. **Close** — отметь чекбоксы в `todo.md`, синхронизируй таск-трекер, подготовь next steps.
+Blocking Issues & Errors (do not ignore)
+- Never ignore code/build/test/runtime errors that block the user's requested outcome or break functionality/operability.
+- Act in this order with the smallest effective action:
+  1) Minimal fix inside the impacted scope; keep the diff surgical.
+  2) Contain via seam/stub/feature-flag/guard so the task can proceed safely.
+  3) If wider changes are required, escalate with precise reproduction steps, diagnosis, and a patch-ready diff.
+- Do not revert or modify unrelated user changes. If overlap appears, pause edits in that area and propose a safe resolution path (file-scoped change or short patch series).
+- Treat failing tests/build in the impacted scope as blocking; fix or guard. Leave unrelated failures untouched unless they break the run/verify pipeline; then propose a minimal isolated remedy or isolation strategy (targeted test run, CHANGED_ONLY), with exact verify commands.
+- Do not ship with red gates on the changed surface; always include rollback steps.
 
-## codex-rs Execution Protocol
-- Директории crate имеют префикс `codex-` (пример: `core` → `codex-core`).
-- В `format!` инлайни переменные в `{}` когда возможно.
-- Не изменяй код, связанный с `CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR` или `CODEX_SANDBOX_ENV_VAR`.
-- После изменений Rust-кода: выполни `just fmt` (без запроса). Перед финализацией — предложи владельцу запустить `just fix -p <project>`; без согласия не запускай полную версию.
-- Тесты: сначала проектные (`cargo test -p <crate>`), затем при изменении `common`, `core`, `protocol` — `cargo test --all-features` (предварительно спроси).
+Decisions & ADR
+- When a choice materially affects design/UX/perf, include a micro-ADR (1-3 lines: choice, reason, consequences) in the final message. Prefer 1 recommended path (+ up to 2 alternatives). If the user is silent, take the recommended path.
 
-## TUI Coding Standards
-- Следуй `codex-rs/tui/styles.md`.
-- Используй стили Ratatui через Stylize (`"text".into()`, `"warn".red()`, и т.д.).
-- Для текстовых переносов применяй `textwrap::wrap` или утилиты из `tui/src/wrapping.rs`.
-- Для линейных префиксов используй `prefix_lines`.
+Implementation Standards
+- Idiomatic code; clear naming; cohesive modules. Keep public interfaces stable unless explicitly approved.
+- Types and contracts; for APIs, keep concise OpenAPI/JSON Schema/GraphQL where relevant.
+- Errors: fail fast with actionable messages; no swallowed exceptions.
+- Concurrency: avoid races; bound parallelism; honor cancellation/timeouts.
+- I/O & memory: no N+1; stream large data; deterministic resource cleanup.
+- Security: validate inputs, safe path handling, injection defenses; never expose secrets.
 
-## Snapshot & Testing Workflow
-- При изменении UI запускай `cargo test -p codex-tui`.
-- Просматривай pending snapshots через `cargo insta pending-snapshots -p codex-tui`.
-- Для принятия всех новых снапшотов: `cargo insta accept -p codex-tui` (только при полной проверке).
-- В тестах применяй `pretty_assertions::assert_eq`.
+Tests (edge-aware)
+- Cover only the changed surface and its edges; do not fix unrelated failures unless they block the task as per the policy above.
+- Favor: unit for core logic; contract tests for APIs; snapshot/visual for UI; property/fuzz for parsers/numerics/serialization.
+- Provide exact copy-paste commands to run the tests you rely on.
 
-## Cognitive Ease Checklist
-- Держи ответы и документы короткими, структурированными по Plan → Build → Validate.
-- Избегай дублирования: ссылайся на `todo.md` вместо копирования списков.
-- Документируй только необходимые контексты (роль артефакта, метрика, ссылка на REQ).
-- Перед завершением задачи проверь, что пользователь, ревьюер и агент смогут восстановить ход мыслей по заголовкам и чеклистам.
+Performance
+- Declare lightweight budgets for hot paths (latency/memory/allocations) and state expected input scale.
+- Choose algorithms/data structures consciously; benchmark when useful; report method and deltas.
+- Trim dependencies; avoid heavy runtime features on hot paths; batch work; cache intentionally.
+
+Dependencies & Freshness
+- Treat knowledge as possibly stale (early 2025). Verify versions and compatibility via official registries; prefer LTS where available.
+- Pin versions sensibly; note relevant breaking changes. If network is restricted, proceed with best-known stable baselines and leave a TODO with exact verification commands.
+
+UI/UX (when applicable)
+- Preserve functional parity and visual consistency (tokens/spacing/components/themes).
+- Maintain high interactivity with no regressions to keyboard navigation, focus, and ARIA; responsive layouts; avoid layout shift.
+- Meet accessibility practices; respect prefers-reduced-motion and color contrast; keep bundle health via code-splitting as needed.
+
+Data/APIs/Storage (when applicable)
+- Schema changes are migrations: idempotent, ordered, rollbackable.
+- Index intentionally; inspect query plans; avoid N+1.
+- Be explicit about consistency model and transaction boundaries.
+- Pagination/filter/sort: stable order; guard against explosive scans; return total counts when feasible.
+- Rate limits/backpressure: retries with jitter and idempotency keys.
+
+Observability & DX
+- Add structured logs at action points; avoid noisy prints; never log sensitive data.
+- Expose simple counters/timers if stack supports it.
+- Provide run/build/test instructions so a non-programmer can operate the project; prefer a single entrypoint command when feasible.
+
+Monorepos & Scope
+- Detect impacted packages/apps via dep graph; limit verify/build to the impacted set unless a full run is required.
+- Support WORKSPACE-like scoping when appropriate and declare scope_paths per microtask.
+
+TODO Protocol (deterministic minimum)
+- Use `todo.machine.md` as the single source of planned work and `todo.completed.machine.md` as an immutable ledger.
+- One YAML block per task with: id (kebab), title, type, status, priority, size_points, scope_paths, spec (Given/When/Then), budgets, risks, dependencies, tests_required, verify_commands, rollback.commands, docs_updates, artifacts, audit{created_at/by,updated_at/by}.
+- On start set status=in_progress; on blockers set status=blocked with reasons and 1 recommended resolution (+ up to 2 alternatives).
+- On completion set status=done and immediately append a ledger entry with commits, measures, test_summary, verify_commands_ran, docs_updated, handoff{verify_steps,rollback_steps}, links?.
+
+Definition of Done
+- All relevant builds/tests green; no perf budget regressions; style consistent; public interfaces stable unless approved; docs/usage updated.
+- Provide a concise handoff: what changed, why, how to verify, how to roll back.
+
+Final Message Add-ons (compatible with CLI style rules)
+- Lead with what changed and why; include file pointers as per CLI rules (path[:line] or path#Lline).
+- Include copy-paste verify commands and a short micro-ADR if choices were meaningful.
+- Mention TODO delta (which task ids changed) and only natural next steps.
+
+Edge-Case Battery (consider as relevant)
+- Empties/NULL/NaN; zero/one/huge inputs; duplicates/stable ordering; locales/Unicode/time zones/DST/leap; float precision/overflow/underflow/bigint; network flakiness/timeouts/retries/backoff/idempotency; concurrency interleavings/locks/cancel/timeouts; filesystem paths/encodings/permissions/long names/case/symlinks; security validity checks (path traversal/injection); EOL normalization and case-insensitive filesystems.

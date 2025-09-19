@@ -14,6 +14,7 @@ use crate::pkce::PkceCodes;
 use crate::pkce::generate_pkce;
 use base64::Engine;
 use chrono::Utc;
+use codex_core::auth::AuthAccount;
 use codex_core::auth::AuthDotJson;
 use codex_core::auth::get_auth_file;
 use codex_core::default_client::ORIGINATOR;
@@ -472,9 +473,17 @@ async fn persist_tokens_async(
             tokens.account_id = Some(acc.to_string());
         }
         let auth = AuthDotJson {
-            openai_api_key: api_key,
-            tokens: Some(tokens),
-            last_refresh: Some(Utc::now()),
+            openai_api_key: api_key.clone(),
+            tokens: None,
+            last_refresh: None,
+            accounts: vec![AuthAccount {
+                openai_api_key: api_key,
+                tokens: Some(tokens),
+                last_refresh: Some(Utc::now()),
+                rate_limit_reset: None,
+            }],
+            current_account_index: Some(0),
+            rotation_enabled: Some(false),
         };
         codex_core::auth::write_auth_json(&auth_file, &auth)
     })

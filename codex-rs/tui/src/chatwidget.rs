@@ -295,6 +295,10 @@ impl ChatWidget {
         self.bottom_pane.set_token_usage(info.clone());
         self.token_info = info;
     }
+
+    pub(crate) fn set_input_focus(&mut self, has_focus: bool) {
+        self.bottom_pane.set_input_focus(has_focus);
+    }
     /// Finalize any active exec as failed, push an error message into history,
     /// and stop/clear running UI state.
     fn finalize_turn_with_error_message(&mut self, message: String) {
@@ -1383,11 +1387,13 @@ impl ChatWidget {
         &mut self,
         entries: Vec<McpManagerEntry>,
         template_count: usize,
+        workspace_root: PathBuf,
     ) {
         let init = McpManagerInit {
             app_event_tx: self.app_event_tx.clone(),
             entries,
             template_count,
+            workspace_root,
         };
         self.bottom_pane
             .show_custom_view(Box::new(McpManagerView::new(init)));
@@ -1398,6 +1404,7 @@ impl ChatWidget {
         catalog: TemplateCatalog,
         draft: Option<McpWizardDraft>,
         existing_name: Option<String>,
+        workspace_root: PathBuf,
     ) {
         let parser = SourceParser::new(std::env::current_dir().ok());
         let cache = SignalCache::default();
@@ -1431,6 +1438,7 @@ impl ChatWidget {
             draft,
             existing_name,
             intake_engine,
+            workspace_root,
         };
         self.bottom_pane
             .show_custom_view(Box::new(McpWizardView::new(init)));

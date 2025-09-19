@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -34,6 +35,8 @@ use ratatui::widgets::Widget;
 use ratatui::widgets::Wrap;
 use unicode_segmentation::UnicodeSegmentation;
 
+use super::file_browser::FileBrowser;
+use super::file_browser::FileBrowserOutcome;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::BottomPane;
@@ -55,6 +58,7 @@ pub(crate) struct McpWizardInit {
     pub draft: Option<McpWizardDraft>,
     pub existing_name: Option<String>,
     pub intake_engine: Arc<IntakeEngine>,
+    pub workspace_root: PathBuf,
 }
 
 pub(crate) struct McpWizardView {
@@ -66,6 +70,7 @@ pub(crate) struct McpWizardView {
     intake_engine: Arc<IntakeEngine>,
     intake_state: IntakeState,
     intake_error: Option<String>,
+    workspace_root: PathBuf,
     screen: WizardScreen,
     field_scroll: ScrollState,
     field_visible_rows: Cell<usize>,
@@ -76,6 +81,7 @@ pub(crate) struct McpWizardView {
     variant_target: Option<FieldKind>,
     error_message: Option<String>,
     close_requested: bool,
+    file_browser: Option<FileBrowser>,
 }
 
 impl McpWizardView {
@@ -119,6 +125,7 @@ impl McpWizardView {
             intake_engine: init.intake_engine,
             intake_state: IntakeState::new(),
             intake_error: None,
+            workspace_root: init.workspace_root,
             screen,
             field_scroll,
             field_visible_rows: Cell::new(1),
@@ -129,6 +136,7 @@ impl McpWizardView {
             variant_target: None,
             error_message: None,
             close_requested: false,
+            file_browser: None,
         };
         view.refresh_intake();
         view
@@ -189,6 +197,56 @@ impl McpWizardView {
                 self.intake_error = Some(err.to_string());
             }
         }
+    }
+
+    fn open_file_browser(&mut self) {
+        let start = self
+            .resolve_source_to_pathbuf()
+            .unwrap_or_else(|| self.workspace_root.clone());
+        self.file_browser = Some(FileBrowser::new(start, self.workspace_root.clone()));
+        self.screen = WizardScreen::FileBrowser;
+        self.error_message = None;
+    }
+
+    fn handle_file_browser_key(&mut self, key_event: KeyEvent) {
+        if let Some(browser) = self.file_browser.as_mut() {
+            match browser.handle_key(key_event) {
+                FileBrowserOutcome::None => {}
+                FileBrowserOutcome::Cancelled => {
+                    self.file_browser = None;
+                    self.screen = WizardScreen::Form;
+                }
+                FileBrowserOutcome::Selected(selection) => {
+                    self.apply_file_browser_selection(selection);
+                    self.file_browser = None;
+                    self.screen = WizardScreen::Form;
+                }
+            }
+        }
+    }
+
+    fn apply_file_browser_selection(&mut self, selection: String) {
+        self.draft.source_path = selection;
+        self.refresh_intake();
+    }
+
+    fn resolve_source_to_pathbuf(&self) -> Option<PathBuf> {
+        let raw = self.draft.source_path.trim();
+        if raw.is_empty() {
+            return None;
+        }
+        let candidate = PathBuf::from(raw);
+        if candidate.is_absolute() {
+            Some(candidate)
+        } else {
+            Some(self.workspace_root.join(candidate))
+        }
+    }
+
+    fn selected_field_supports_browser(&self) -> bool {
+        current_enabled_entry(&self.draft, &self.field_scroll)
+            .map(|entry| matches!(entry.kind, FieldKind::Source))
+            .unwrap_or(false)
     }
 
     fn apply_text(&mut self, field: FieldKind, value: &str) -> anyhow::Result<()> {
@@ -567,6 +625,8 @@ impl McpWizardView {
             "Keys: ".dim(),
             "↑/↓".cyan(),
             " move  ".dim(),
+            "f".cyan(),
+            " browse source  ".dim(),
             "Enter".cyan(),
             " edit/select  ".dim(),
             "s".cyan(),
@@ -646,6 +706,7 @@ impl McpWizardView {
                     .dim()
                     .into(),
             );
+            lines.push("Press 'f' to browse the workspace.".dim().into());
         } else {
             lines.push(Line::from(vec!["Source: ".dim(), path.to_string().into()]));
             if let Some(preview) = self.intake_state.preview() {
@@ -728,6 +789,12 @@ impl McpWizardView {
         Widget::render(paragraph, area, buf);
     }
 
+    fn render_file_browser(&self, area: Rect, buf: &mut Buffer) {
+        if let Some(browser) = self.file_browser.as_ref() {
+            browser.render(area, buf, "Select MCP Source");
+        }
+    }
+
     fn append_detector_suggestions(&self, lines: &mut Vec<Line>) {
         let suggestions = self.intake_state.suggestions();
         if suggestions.is_empty() {
@@ -784,6 +851,11 @@ impl BottomPaneView for McpWizardView {
             WizardScreen::Form => match key_event.code {
                 KeyCode::Esc => {
                     self.close_requested = true;
+                }
+                KeyCode::Char(ch)
+                    if (ch == 'f' || ch == 'F') && self.selected_field_supports_browser() =>
+                {
+                    self.open_file_browser();
                 }
                 KeyCode::Char('s') => {
                     self.screen = WizardScreen::Summary;
@@ -876,6 +948,9 @@ impl BottomPaneView for McpWizardView {
                 }
                 _ => {}
             },
+            WizardScreen::FileBrowser => {
+                self.handle_file_browser_key(key_event);
+            }
         }
     }
 
@@ -889,7 +964,7 @@ impl BottomPaneView for McpWizardView {
     }
 
     fn desired_height(&self, _width: u16) -> u16 {
-        18
+        if self.file_browser.is_some() { 28 } else { 24 }
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
@@ -899,6 +974,7 @@ impl BottomPaneView for McpWizardView {
             WizardScreen::VariantSelect => self.render_variant_select(area, buf),
             WizardScreen::TextEdit(field) => self.render_text_edit(field, area, buf),
             WizardScreen::Summary => self.render_summary(area, buf),
+            WizardScreen::FileBrowser => self.render_file_browser(area, buf),
         }
     }
 }
@@ -919,6 +995,7 @@ enum WizardScreen {
     VariantSelect,
     TextEdit(FieldKind),
     Summary,
+    FileBrowser,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1539,6 +1616,7 @@ mod tests {
             draft: None,
             existing_name: None,
             intake_engine: test_engine(),
+            workspace_root: PathBuf::from("/workspace"),
         })
     }
 
@@ -1573,6 +1651,7 @@ mod tests {
             draft: Some(sample_draft()),
             existing_name: None,
             intake_engine: test_engine(),
+            workspace_root: PathBuf::from("/workspace"),
         });
         view.screen = WizardScreen::Form;
         view.error_message = Some("Command must not be empty".to_string());
@@ -1590,6 +1669,7 @@ mod tests {
             draft: Some(sample_draft()),
             existing_name: None,
             intake_engine: test_engine(),
+            workspace_root: PathBuf::from("/workspace"),
         });
         view.screen = WizardScreen::VariantSelect;
         view.variant_target = Some(FieldKind::AuthType);
@@ -1609,6 +1689,7 @@ mod tests {
             draft: Some(sample_draft()),
             existing_name: None,
             intake_engine: test_engine(),
+            workspace_root: PathBuf::from("/workspace"),
         });
         view.screen = WizardScreen::TextEdit(FieldKind::Env);
         view.error_message = Some("Expected KEY=VALUE pairs".to_string());
@@ -1625,6 +1706,7 @@ mod tests {
             draft: Some(sample_draft()),
             existing_name: Some("existing".to_string()),
             intake_engine: test_engine(),
+            workspace_root: PathBuf::from("/workspace"),
         });
         view.screen = WizardScreen::Summary;
 

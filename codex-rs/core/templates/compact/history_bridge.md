@@ -1,7 +1,9 @@
-You were originally given instructions from a user over one or more turns. Here were the user messages:
-
-{{ user_messages_text }}
-
-Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:
-
-{{ summary_text }}
+MEMORY_ARCHIVE
+GUIDANCE=Эта запись — память прошлых шагов; опирайся на неё для продолжения текущей задачи.
+PAST.SUMMARY={{ summary_text }}
+PAST.SESSION={% if let Some(value) = session_context_text.as_ref() %}{{ value }}{% else %}(none){% endif %}
+PAST.DIRECTIVES={% if let Some(value) = user_instructions_text.as_ref() %}{{ value }}{% else %}(none){% endif %}
+PAST.ENV={% if let Some(value) = environment_context_text.as_ref() %}{{ value }}{% else %}(none){% endif %}
+PAST.PLAN={% if let Some(value) = plan_text.as_ref() %}{{ value }}{% else %}(none){% endif %}
+PAST.REPO={% if let Some(value) = repo_outline_text.as_ref() %}{{ value }}{% else %}(none){% endif %}
+PAST.MESSAGES={{ user_messages_text }}

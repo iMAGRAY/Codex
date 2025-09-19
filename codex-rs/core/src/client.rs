@@ -328,6 +328,37 @@ impl ModelClient {
                                     .plan_type
                                     .or_else(|| auth.as_ref().and_then(|a| a.get_plan_type()));
                                 let resets_in_seconds = error.resets_in_seconds;
+
+                                let mut rotated = false;
+                                if let Some(manager) = auth_manager.as_ref() {
+                                    if let Err(e) =
+                                        manager.mark_current_rate_limited(resets_in_seconds)
+                                    {
+                                        warn!(
+                                            "failed to mark current account as rate limited: {e}"
+                                        );
+                                    }
+
+                                    match manager.switch_to_next_account() {
+                                        Ok(true) => {
+                                            rotated = true;
+                                            debug!("Switched to next account due to rate limit");
+                                        }
+                                        Ok(false) => {
+                                            // no-op, will fall back to error below
+                                        }
+                                        Err(e) => {
+                                            warn!("failed to rotate account after rate limit: {e}");
+                                        }
+                                    }
+                                }
+
+                                if rotated {
+                                    // Don't count this as a retry attempt - we switched accounts
+                                    // Just continue with the same attempt number
+                                    continue;
+                                }
+
                                 return Err(CodexErr::UsageLimitReached(UsageLimitReachedError {
                                     plan_type,
                                     resets_in_seconds,

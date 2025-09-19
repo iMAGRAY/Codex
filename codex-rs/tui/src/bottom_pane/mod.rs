@@ -101,6 +101,14 @@ impl BottomPane {
         }
     }
 
+    pub(crate) fn set_input_focus(&mut self, has_focus: bool) {
+        if self.has_input_focus == has_focus {
+            return;
+        }
+        self.has_input_focus = has_focus;
+        self.composer.set_has_focus(has_focus);
+    }
+
     pub fn desired_height(&self, width: u16) -> u16 {
         // Always reserve one blank row above the pane for visual spacing.
         let top_margin = 1;

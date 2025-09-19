@@ -134,8 +134,8 @@ async fn end_to_end_login_flow_persists_auth_json() {
     // Wait for server shutdown
     server.block_until_done().await.unwrap();
 
-    // Validate auth.json
-    let auth_path = codex_home.join("auth.json");
+    // Validate auth store (auth_pool.json preferred)
+    let auth_path = codex_core::auth::get_auth_file(&codex_home);
     let data = std::fs::read_to_string(&auth_path).unwrap();
     let json: serde_json::Value = serde_json::from_str(&data).unwrap();
     // The following assert is here because of the old oauth flow that exchanges tokens for an
@@ -187,7 +187,7 @@ async fn creates_missing_codex_home_dir() {
 
     server.block_until_done().await.unwrap();
 
-    let auth_path = codex_home.join("auth.json");
+    let auth_path = codex_core::auth::get_auth_file(&codex_home);
     assert!(
         auth_path.exists(),
         "auth.json should be created even if parent dir was missing"

@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::path::PathBuf;
 
 use codex_core::mcp::health::HealthReport;
 use codex_core::mcp::health::HealthStatus;
@@ -21,6 +22,8 @@ use ratatui::widgets::TableState;
 use ratatui::widgets::Widget;
 use ratatui::widgets::Wrap;
 
+use super::file_browser::FileBrowser;
+use super::file_browser::FileBrowserOutcome;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::BottomPane;
@@ -40,6 +43,7 @@ pub(crate) struct McpManagerInit {
     pub app_event_tx: AppEventSender,
     pub entries: Vec<McpManagerEntry>,
     pub template_count: usize,
+    pub workspace_root: PathBuf,
 }
 
 pub(crate) struct McpManagerView {
@@ -50,12 +54,15 @@ pub(crate) struct McpManagerView {
     list_visible_rows: Cell<usize>,
     close_requested: bool,
     confirm_delete: bool,
+    workspace_root: PathBuf,
+    file_browser: Option<FileBrowser>,
 }
 
 impl McpManagerView {
     pub(crate) fn new(init: McpManagerInit) -> Self {
         let mut scroll = ScrollState::new();
-        scroll.clamp_selection(init.entries.len());
+        let total_rows = init.entries.len().saturating_add(1);
+        scroll.clamp_selection(total_rows);
         Self {
             app_event_tx: init.app_event_tx,
             entries: init.entries,
@@ -64,12 +71,15 @@ impl McpManagerView {
             list_visible_rows: Cell::new(1),
             close_requested: false,
             confirm_delete: false,
+            workspace_root: init.workspace_root,
+            file_browser: None,
         }
     }
 
     fn selected_entry(&self) -> Option<&McpManagerEntry> {
         self.scroll
             .selected_idx
+            .and_then(|idx| idx.checked_sub(1))
             .and_then(|idx| self.entries.get(idx))
     }
 
@@ -77,37 +87,41 @@ impl McpManagerView {
         self.list_visible_rows.get().max(1)
     }
 
+    fn total_rows(&self) -> usize {
+        self.entries.len().saturating_add(1)
+    }
+
     fn move_selection_up(&mut self) {
-        self.scroll.move_up_wrap(self.entries.len());
+        self.scroll.move_up_wrap(self.total_rows());
         self.scroll
-            .ensure_visible(self.entries.len(), self.visible_rows());
+            .ensure_visible(self.total_rows(), self.visible_rows());
         self.confirm_delete = false;
     }
 
     fn move_selection_down(&mut self) {
-        self.scroll.move_down_wrap(self.entries.len());
+        self.scroll.move_down_wrap(self.total_rows());
         self.scroll
-            .ensure_visible(self.entries.len(), self.visible_rows());
+            .ensure_visible(self.total_rows(), self.visible_rows());
         self.confirm_delete = false;
     }
 
     fn page_up(&mut self) {
         let steps = self.visible_rows().saturating_sub(1);
         for _ in 0..steps {
-            self.scroll.move_up_wrap(self.entries.len());
+            self.scroll.move_up_wrap(self.total_rows());
         }
         self.scroll
-            .ensure_visible(self.entries.len(), self.visible_rows());
+            .ensure_visible(self.total_rows(), self.visible_rows());
         self.confirm_delete = false;
     }
 
     fn page_down(&mut self) {
         let steps = self.visible_rows().saturating_sub(1);
         for _ in 0..steps {
-            self.scroll.move_down_wrap(self.entries.len());
+            self.scroll.move_down_wrap(self.total_rows());
         }
         self.scroll
-            .ensure_visible(self.entries.len(), self.visible_rows());
+            .ensure_visible(self.total_rows(), self.visible_rows());
         self.confirm_delete = false;
     }
 
@@ -133,6 +147,7 @@ impl McpManagerView {
 
     fn request_remove_selected(&mut self) {
         if self.selected_entry().is_none() {
+            self.confirm_delete = false;
             return;
         }
         if self.confirm_delete {
@@ -151,20 +166,50 @@ impl McpManagerView {
         self.app_event_tx.send(AppEvent::ReloadMcpServers);
     }
 
+    fn open_file_browser(&mut self) {
+        let start = self.workspace_root.clone();
+        self.file_browser = Some(FileBrowser::new(start, self.workspace_root.clone()));
+        self.confirm_delete = false;
+    }
+
+    fn handle_file_browser_key(&mut self, key_event: crossterm::event::KeyEvent) {
+        if let Some(browser) = self.file_browser.as_mut() {
+            match browser.handle_key(key_event) {
+                FileBrowserOutcome::None => {}
+                FileBrowserOutcome::Cancelled => {
+                    self.file_browser = None;
+                }
+                FileBrowserOutcome::Selected(source_path) => {
+                    let mut draft = McpWizardDraft::default();
+                    draft.source_path = source_path;
+                    self.app_event_tx.send(AppEvent::OpenMcpWizard {
+                        template_id: None,
+                        draft: Some(draft),
+                        existing_name: None,
+                    });
+                    self.file_browser = None;
+                }
+            }
+        }
+    }
+
     fn render_list(&self, area: Rect, buf: &mut Buffer) {
         let header = Row::new(vec!["Name".bold(), "Status".bold(), "Command".bold()]);
 
-        let rows: Vec<Row> = self
-            .entries
-            .iter()
-            .map(|entry| {
-                Row::new(vec![
-                    Span::raw(entry.snapshot.name.clone()),
-                    health_span(&entry.health.status),
-                    Span::raw(entry.snapshot.command.clone()),
-                ])
-            })
-            .collect();
+        let mut rows: Vec<Row> = Vec::with_capacity(self.entries.len().saturating_add(1));
+        rows.push(Row::new(vec![
+            Span::styled("Browse workspace…", Style::default().italic()),
+            "".into(),
+            "Press Enter to select a manifest".dim().into(),
+        ]));
+
+        rows.extend(self.entries.iter().map(|entry| {
+            Row::new(vec![
+                Span::raw(entry.snapshot.name.clone()),
+                health_span(&entry.health.status),
+                Span::raw(entry.snapshot.command.clone()),
+            ])
+        }));
 
         let mut state = TableState::default();
         state.select(self.scroll.selected_idx);
@@ -194,7 +239,19 @@ impl McpManagerView {
 
     fn render_detail(&self, area: Rect, buf: &mut Buffer) {
         let mut lines: Vec<Line> = Vec::new();
-        if let Some(entry) = self.selected_entry() {
+        if self.scroll.selected_idx == Some(0) {
+            lines.push("Browse the workspace to add MCP servers.".into());
+            lines.push(
+                "Press Enter to open the file browser or 'b' to browse directly."
+                    .dim()
+                    .into(),
+            );
+            lines.push(
+                "Codex will analyse the selected folder and pre-fill the wizard."
+                    .dim()
+                    .into(),
+            );
+        } else if let Some(entry) = self.selected_entry() {
             lines.extend(detail_lines(&entry.snapshot));
             lines.push(Line::from(vec![
                 "Status: ".dim(),
@@ -219,6 +276,11 @@ impl McpManagerView {
                     .into(),
                 );
             }
+            lines.push(
+                "Press 'f' to browse the workspace for MCP manifests."
+                    .dim()
+                    .into(),
+            );
         }
 
         lines.push(Line::from(""));
@@ -228,8 +290,10 @@ impl McpManagerView {
             " move  ".dim(),
             "n".cyan(),
             " new  ".dim(),
+            "f/b".cyan(),
+            " browse  ".dim(),
             "Enter".cyan(),
-            " edit  ".dim(),
+            " select/edit  ".dim(),
             "r".cyan(),
             " reload  ".dim(),
             "d".cyan(),
@@ -248,6 +312,12 @@ impl McpManagerView {
 impl BottomPaneView for McpManagerView {
     fn handle_key_event(&mut self, _pane: &mut BottomPane, key_event: crossterm::event::KeyEvent) {
         use crossterm::event::KeyCode;
+
+        if self.file_browser.is_some() {
+            self.handle_file_browser_key(key_event);
+            return;
+        }
+
         self.confirm_delete &= matches!(key_event.code, KeyCode::Char('d'));
 
         match key_event.code {
@@ -255,7 +325,14 @@ impl BottomPaneView for McpManagerView {
                 self.close_requested = true;
             }
             KeyCode::Char('n') => self.open_new_wizard(),
-            KeyCode::Enter | KeyCode::Char('e') => self.open_edit_wizard(),
+            KeyCode::Char('f') | KeyCode::Char('b') => self.open_file_browser(),
+            KeyCode::Enter | KeyCode::Char('e') => {
+                if self.scroll.selected_idx == Some(0) {
+                    self.open_file_browser();
+                } else {
+                    self.open_edit_wizard();
+                }
+            }
             KeyCode::Char('r') => self.refresh(),
             KeyCode::Char('d') => self.request_remove_selected(),
             KeyCode::Up => self.move_selection_up(),
@@ -280,12 +357,17 @@ impl BottomPaneView for McpManagerView {
     }
 
     fn desired_height(&self, _width: u16) -> u16 {
-        16
+        if self.file_browser.is_some() { 28 } else { 22 }
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
-        let layout =
-            Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)]).split(area);
+        if let Some(browser) = self.file_browser.as_ref() {
+            browser.render(area, buf, "Select MCP Source");
+            return;
+        }
+
+        let layout = Layout::horizontal([Constraint::Percentage(46), Constraint::Percentage(54)])
+            .split(area);
         self.render_list(layout[0], buf);
         self.render_detail(layout[1], buf);
     }
@@ -508,6 +590,7 @@ mod tests {
             app_event_tx: AppEventSender::new(tx),
             entries,
             template_count,
+            workspace_root: PathBuf::from("/workspace"),
         })
     }
 

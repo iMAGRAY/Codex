@@ -5,9 +5,11 @@
 WORKSPACE_DIR := codex-rs
 DIST_DIR := dist
 BIN_NAME := codex
+GUI_BIN_NAME := codex-gui
 
 INSTALL_BIN_DIR ?= $(HOME)/.local/bin
 INSTALL_BIN_NAME ?= magray
+INSTALL_GUI_BIN_NAME ?= magray-desktop
 
 LINUX_TARGET := x86_64-unknown-linux-gnu
 WINDOWS_TARGET := x86_64-pc-windows-gnu
@@ -30,11 +32,17 @@ build: build-linux build-windows
 build-linux: ensure-linux-target
 	@echo "[build-linux] compiling $(BIN_NAME) for $(LINUX_TARGET)"
 	@cd $(WORKSPACE_DIR) && cargo build --release --locked --bin $(BIN_NAME) --target $(LINUX_TARGET)
+	@echo "[build-linux] compiling $(GUI_BIN_NAME) for $(LINUX_TARGET)"
+	@cd $(WORKSPACE_DIR) && cargo build --release --locked --bin $(GUI_BIN_NAME) --target $(LINUX_TARGET)
 	@mkdir -p $(DIST_DIR)
 	@cp $(WORKSPACE_DIR)/target/$(LINUX_TARGET)/release/$(BIN_NAME) $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET)
+	@cp $(WORKSPACE_DIR)/target/$(LINUX_TARGET)/release/$(GUI_BIN_NAME) $(DIST_DIR)/$(GUI_BIN_NAME)-$(LINUX_TARGET)
 	@echo "[build-linux] output => $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET)"
+	@echo "[build-linux] output => $(DIST_DIR)/$(GUI_BIN_NAME)-$(LINUX_TARGET)"
 	@install -Dm755 $(DIST_DIR)/$(BIN_NAME)-$(LINUX_TARGET) $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)
 	@echo "[build-linux] refreshed $(INSTALL_BIN_DIR)/$(INSTALL_BIN_NAME)"
+	@install -Dm755 $(DIST_DIR)/$(GUI_BIN_NAME)-$(LINUX_TARGET) $(INSTALL_BIN_DIR)/$(INSTALL_GUI_BIN_NAME)
+	@echo "[build-linux] refreshed $(INSTALL_BIN_DIR)/$(INSTALL_GUI_BIN_NAME)"
 
 build-windows: ensure-windows-target
 ifeq ($(strip $(MINGW_CC)),)

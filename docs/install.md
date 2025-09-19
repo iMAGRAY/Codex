@@ -37,4 +37,15 @@ cargo clippy --tests
 
 # Run the tests.
 cargo test
-``` 
+```
+
+### Produce release binaries (Linux host)
+
+From the repository root you can cross-compile the shipping binaries for Linux and Windows in one step:
+
+```bash
+sudo apt install mingw-w64          # required once for the Windows target toolchain
+make build                          # generates dist/codex-<target>
+```
+
+The `make build` recipe runs `cargo build --release` for both `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu`, placing the resulting artifacts in `dist/`. Ensure the corresponding Rust targets (`rustup target add …`) are available before running the command.

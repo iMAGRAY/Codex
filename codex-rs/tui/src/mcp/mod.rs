@@ -1,7 +1,7 @@
+mod file_browser;
 mod manager_view;
 mod types;
 mod wizard_view;
-
 pub(crate) use manager_view::McpManagerEntry;
 pub(crate) use manager_view::McpManagerInit;
 pub(crate) use manager_view::McpManagerView;

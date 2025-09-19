@@ -1150,9 +1150,10 @@ mod tests {
         assert_eq!(outcome.manifest.file_count, 2);
         assert!(outcome.bundle_path.exists());
 
+        let expected_fingerprint = outcome.signature.fingerprint().unwrap();
         let verify = VerifyRequest {
             bundle_path: &outcome.bundle_path,
-            expected_fingerprint: Some(&outcome.signature.fingerprint().unwrap()),
+            expected_fingerprint: Some(&expected_fingerprint),
             install: true,
             force_install: false,
             actor: "ci",

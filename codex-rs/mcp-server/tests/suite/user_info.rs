@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Context;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use codex_core::auth::AuthAccount;
 use codex_core::auth::AuthDotJson;
 use codex_core::auth::get_auth_file;
 use codex_core::auth::write_auth_json;
@@ -31,13 +32,21 @@ async fn user_info_returns_email_from_auth_json() {
 
     let auth = AuthDotJson {
         openai_api_key: None,
-        tokens: Some(TokenData {
-            id_token,
-            access_token: "access".to_string(),
-            refresh_token: "refresh".to_string(),
-            account_id: None,
-        }),
+        tokens: None,
         last_refresh: None,
+        accounts: vec![AuthAccount {
+            openai_api_key: None,
+            tokens: Some(TokenData {
+                id_token,
+                access_token: "access".to_string(),
+                refresh_token: "refresh".to_string(),
+                account_id: None,
+            }),
+            last_refresh: None,
+            rate_limit_reset: None,
+        }],
+        current_account_index: Some(0),
+        rotation_enabled: Some(false),
     };
     write_auth_json(&auth_path, &auth).expect("write auth.json");
 
