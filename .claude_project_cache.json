@@ -41,7 +41,7 @@
         "path": ".\\Makefile",
         "relative_path": "Makefile",
         "file_type": "none",
-        "size_bytes": 2486,
+        "size_bytes": 3093,
         "is_code_file": false
       },
       {
@@ -56,6 +56,13 @@
         "relative_path": "README.md",
         "file_type": "md",
         "size_bytes": 4498,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\TODO.terminal.md",
+        "relative_path": "TODO.terminal.md",
+        "file_type": "md",
+        "size_bytes": 4336,
         "is_code_file": true
       },
       {
@@ -132,7 +139,7 @@
         "path": ".\\codex-rs\\Cargo.lock",
         "relative_path": "codex-rs/Cargo.lock",
         "file_type": "lock",
-        "size_bytes": 187097,
+        "size_bytes": 187150,
         "is_code_file": false
       },
       {
@@ -174,28 +181,35 @@
         "path": ".\\codex-rs\\apply-patch\\Cargo.toml",
         "relative_path": "codex-rs/apply-patch/Cargo.toml",
         "file_type": "toml",
-        "size_bytes": 464,
+        "size_bytes": 551,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\apply-patch\\src\\cli.rs",
         "relative_path": "codex-rs/apply-patch/src/cli.rs",
         "file_type": "rs",
-        "size_bytes": 8334,
+        "size_bytes": 8382,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\apply-patch\\src\\history.rs",
+        "relative_path": "codex-rs/apply-patch/src/history.rs",
+        "file_type": "rs",
+        "size_bytes": 6288,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\apply-patch\\src\\interactive.rs",
         "relative_path": "codex-rs/apply-patch/src/interactive.rs",
         "file_type": "rs",
-        "size_bytes": 2569,
+        "size_bytes": 9172,
         "is_code_file": true
       },
       {
         "path": ".\\codex-rs\\apply-patch\\src\\lib.rs",
         "relative_path": "codex-rs/apply-patch/src/lib.rs",
         "file_type": "rs",
-        "size_bytes": 61477,
+        "size_bytes": 63367,
         "is_code_file": true
       },
       {
@@ -223,7 +237,7 @@
         "path": ".\\codex-rs\\apply-patch\\src\\standalone_executable.rs",
         "relative_path": "codex-rs/apply-patch/src/standalone_executable.rs",
         "file_type": "rs",
-        "size_bytes": 2239,
+        "size_bytes": 18519,
         "is_code_file": true
       },
       {
@@ -237,7 +251,7 @@
         "path": ".\\codex-rs\\apply-patch\\tests\\suite\\cli.rs",
         "relative_path": "codex-rs/apply-patch/tests/suite/cli.rs",
         "file_type": "rs",
-        "size_bytes": 2527,
+        "size_bytes": 4438,
         "is_code_file": true
       },
       {
@@ -363,7 +377,7 @@
         "path": ".\\codex-rs\\cli\\src\\doc_cmd.rs",
         "relative_path": "codex-rs/cli/src/doc_cmd.rs",
         "file_type": "rs",
-        "size_bytes": 10824,
+        "size_bytes": 10764,
         "is_code_file": true
       },
       {
@@ -391,7 +405,7 @@
         "path": ".\\codex-rs\\cli\\src\\main.rs",
         "relative_path": "codex-rs/cli/src/main.rs",
         "file_type": "rs",
-        "size_bytes": 17262,
+        "size_bytes": 17503,
         "is_code_file": true
       },
       {
@@ -427,6 +441,13 @@
         "relative_path": "codex-rs/cli/src/mcp_cmd.rs",
         "file_type": "rs",
         "size_bytes": 22309,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\cli\\src\\memory_cmd.rs",
+        "relative_path": "codex-rs/cli/src/memory_cmd.rs",
+        "file_type": "rs",
+        "size_bytes": 12499,
         "is_code_file": true
       },
       {
@@ -587,7 +608,7 @@
         "path": ".\\codex-rs\\core\\Cargo.toml",
         "relative_path": "codex-rs/core/Cargo.toml",
         "file_type": "toml",
-        "size_bytes": 2708,
+        "size_bytes": 2725,
         "is_code_file": true
       },
       {
@@ -615,7 +636,7 @@
         "path": ".\\codex-rs\\core\\prompt.md",
         "relative_path": "codex-rs/core/prompt.md",
         "file_type": "md",
-        "size_bytes": 24710,
+        "size_bytes": 24822,
         "is_code_file": true
       },
       {
@@ -629,7 +650,14 @@
         "path": ".\\codex-rs\\core\\src\\auth.rs",
         "relative_path": "codex-rs/core/src/auth.rs",
         "file_type": "rs",
-        "size_bytes": 43246,
+        "size_bytes": 44522,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\codex-rs\\core\\src\\auth_backup.rs",
+        "relative_path": "codex-rs/core/src/auth_backup.rs",
+        "file_type": "rs",
+        "size_bytes": 57695,
         "is_code_file": true
       },
       {
@@ -664,7 +692,7 @@
         "path": ".\\codex-rs\\core\\src\\codex.rs",
         "relative_path": "codex-rs/core/src/codex.rs",
         "file_type": "rs",
-        "size_bytes": 143690,
+        "size_bytes": 144366,
         "is_code_file": true
       },
       {
@@ -1931,7 +1959,7 @@
         "path": ".\\codex-rs\\gui\\src\\ui\\mod.rs",
         "relative_path": "codex-rs/gui/src/ui/mod.rs",
         "file_type": "rs",
-        "size_bytes": 16347,
+        "size_bytes": 16343,
         "is_code_file": true
       },
       {
@@ -2561,7 +2589,7 @@
         "path": ".\\codex-rs\\todo.machine.md",
         "relative_path": "codex-rs/todo.machine.md",
         "file_type": "md",
-        "size_bytes": 9553,
+        "size_bytes": 10078,
         "is_code_file": true
       },
       {
@@ -2582,7 +2610,7 @@
         "path": ".\\codex-rs\\tui\\src\\app.rs",
         "relative_path": "codex-rs/tui/src/app.rs",
         "file_type": "rs",
-        "size_bytes": 48352,
+        "size_bytes": 48336,
         "is_code_file": true
       },
       {
@@ -2596,7 +2624,7 @@
         "path": ".\\codex-rs\\tui\\src\\app_event.rs",
         "relative_path": "codex-rs/tui/src/app_event.rs",
         "file_type": "rs",
-        "size_bytes": 2985,
+        "size_bytes": 3009,
         "is_code_file": true
       },
       {
@@ -2631,7 +2659,7 @@
         "path": ".\\codex-rs\\tui\\src\\bottom_pane\\chat_composer.rs",
         "relative_path": "codex-rs/tui/src/bottom_pane/chat_composer.rs",
         "file_type": "rs",
-        "size_bytes": 98282,
+        "size_bytes": 95832,
         "is_code_file": true
       },
       {
@@ -2666,7 +2694,7 @@
         "path": ".\\codex-rs\\tui\\src\\bottom_pane\\mod.rs",
         "relative_path": "codex-rs/tui/src/bottom_pane/mod.rs",
         "file_type": "rs",
-        "size_bytes": 26762,
+        "size_bytes": 29358,
         "is_code_file": true
       },
       {
@@ -2708,7 +2736,7 @@
         "path": ".\\codex-rs\\tui\\src\\chatwidget.rs",
         "relative_path": "codex-rs/tui/src/chatwidget.rs",
         "file_type": "rs",
-        "size_bytes": 63345,
+        "size_bytes": 65077,
         "is_code_file": true
       },
       {
@@ -2736,7 +2764,7 @@
         "path": ".\\codex-rs\\tui\\src\\chatwidget\\tests.rs",
         "relative_path": "codex-rs/tui/src/chatwidget/tests.rs",
         "file_type": "rs",
-        "size_bytes": 69295,
+        "size_bytes": 67434,
         "is_code_file": true
       },
       {
@@ -2785,7 +2813,7 @@
         "path": ".\\codex-rs\\tui\\src\\file_explorer.rs",
         "relative_path": "codex-rs/tui/src/file_explorer.rs",
         "file_type": "rs",
-        "size_bytes": 21732,
+        "size_bytes": 24077,
         "is_code_file": true
       },
       {
@@ -2834,7 +2862,7 @@
         "path": ".\\codex-rs\\tui\\src\\lib.rs",
         "relative_path": "codex-rs/tui/src/lib.rs",
         "file_type": "rs",
-        "size_bytes": 22816,
+        "size_bytes": 22844,
         "is_code_file": true
       },
       {
@@ -2964,6 +2992,13 @@
         "is_code_file": true
       },
       {
+        "path": ".\\codex-rs\\tui\\src\\progressive_disclosure.rs",
+        "relative_path": "codex-rs/tui/src/progressive_disclosure.rs",
+        "file_type": "rs",
+        "size_bytes": 14417,
+        "is_code_file": true
+      },
+      {
         "path": ".\\codex-rs\\tui\\src\\render\\highlight.rs",
         "relative_path": "codex-rs/tui/src/render/highlight.rs",
         "file_type": "rs",
@@ -3016,7 +3051,7 @@
         "path": ".\\codex-rs\\tui\\src\\status_bar.rs",
         "relative_path": "codex-rs/tui/src/status_bar.rs",
         "file_type": "rs",
-        "size_bytes": 6984,
+        "size_bytes": 16719,
         "is_code_file": true
       },
       {
@@ -3093,7 +3128,7 @@
         "path": ".\\codex-rs\\tui\\src\\ui_consts.rs",
         "relative_path": "codex-rs/tui/src/ui_consts.rs",
         "file_type": "rs",
-        "size_bytes": 486,
+        "size_bytes": 5663,
         "is_code_file": true
       },
       {
@@ -3380,7 +3415,7 @@
         "path": ".\\docs\\getting-started.md",
         "relative_path": "docs/getting-started.md",
         "file_type": "md",
-        "size_bytes": 7750,
+        "size_bytes": 8431,
         "is_code_file": true
       },
       {
@@ -3576,7 +3611,7 @@
         "path": ".\\hook-input-debug.json",
         "relative_path": "hook-input-debug.json",
         "file_type": "json",
-        "size_bytes": 55446,
+        "size_bytes": 4169,
         "is_code_file": true
       },
       {
@@ -3650,6 +3685,13 @@
         "is_code_file": true
       },
       {
+        "path": ".\\scripts\\docsearch\\memory.py",
+        "relative_path": "scripts/docsearch/memory.py",
+        "file_type": "py",
+        "size_bytes": 19600,
+        "is_code_file": true
+      },
+      {
         "path": ".\\scripts\\docsearch\\query.py",
         "relative_path": "scripts/docsearch/query.py",
         "file_type": "py",
@@ -3671,6 +3713,27 @@
         "is_code_file": true
       },
       {
+        "path": ".\\tests\\README.md",
+        "relative_path": "tests/README.md",
+        "file_type": "md",
+        "size_bytes": 468,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\tests\\run_apply_patch_demo.sh",
+        "relative_path": "tests/run_apply_patch_demo.sh",
+        "file_type": "sh",
+        "size_bytes": 707,
+        "is_code_file": true
+      },
+      {
+        "path": ".\\todo.machine.md",
+        "relative_path": "todo.machine.md",
+        "file_type": "md",
+        "size_bytes": 1291,
+        "is_code_file": true
+      },
+      {
         "path": ".\\todo.md",
         "relative_path": "todo.md",
         "file_type": "md",
@@ -3679,6 +3742,7 @@
       }
     ],
     "directories": [
+      "1",
       "codex-cli",
       "codex-cli/scripts",
       "codex-rs",
@@ -3815,13 +3879,14 @@
       "scripts",
       "scripts/chaos",
       "scripts/docsearch",
-      "scripts/docsearch/tests"
+      "scripts/docsearch/tests",
+      "tests"
     ],
-    "total_files": 525,
-    "scan_timestamp": "2025-09-20 00:37:14"
+    "total_files": 534,
+    "scan_timestamp": "2025-09-20 12:52:11"
   },
   "metrics": {
-    "total_lines_of_code": 2530872,
+    "total_lines_of_code": 2535117,
     "code_by_language": {
       "html": {
         "file_count": 1,
@@ -3866,12 +3931,12 @@
         "average_nesting_depth": 0.0
       },
       "md": {
-        "file_count": 73,
-        "lines_of_code": 5153,
+        "file_count": 76,
+        "lines_of_code": 5270,
         "lines_of_comments": 0,
-        "blank_lines": 1277,
-        "average_file_size": 70,
-        "complexity_estimate": 51.53,
+        "blank_lines": 1309,
+        "average_file_size": 69,
+        "complexity_estimate": 52.7,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3880,12 +3945,12 @@
         "average_nesting_depth": 0.0
       },
       "py": {
-        "file_count": 11,
-        "lines_of_code": 1149,
-        "lines_of_comments": 96,
-        "blank_lines": 235,
-        "average_file_size": 104,
-        "complexity_estimate": 10.530834,
+        "file_count": 12,
+        "lines_of_code": 1680,
+        "lines_of_comments": 99,
+        "blank_lines": 305,
+        "average_file_size": 140,
+        "complexity_estimate": 15.810589,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3894,26 +3959,26 @@
         "average_nesting_depth": 0.0
       },
       "rs": {
-        "file_count": 372,
-        "lines_of_code": 86922,
-        "lines_of_comments": 6672,
-        "blank_lines": 10098,
-        "average_file_size": 233,
-        "complexity_estimate": 242.62875,
-        "average_cyclomatic": 26.836021,
-        "average_cognitive": 31.282259,
-        "max_cyclomatic": 463,
-        "max_cognitive": 429,
-        "total_functions": 1865,
-        "average_nesting_depth": 1.6639785
+        "file_count": 376,
+        "lines_of_code": 90493,
+        "lines_of_comments": 6852,
+        "blank_lines": 10570,
+        "average_file_size": 240,
+        "complexity_estimate": 252.99435,
+        "average_cyclomatic": 29.587767,
+        "average_cognitive": 35.037235,
+        "max_cyclomatic": 469,
+        "max_cognitive": 447,
+        "total_functions": 2030,
+        "average_nesting_depth": 1.731383
       },
       "sh": {
-        "file_count": 5,
-        "lines_of_code": 391,
+        "file_count": 6,
+        "lines_of_code": 413,
         "lines_of_comments": 0,
-        "blank_lines": 75,
-        "average_file_size": 78,
-        "complexity_estimate": 3.91,
+        "blank_lines": 84,
+        "average_file_size": 68,
+        "complexity_estimate": 4.13,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3923,11 +3988,11 @@
       },
       "toml": {
         "file_count": 28,
-        "lines_of_code": 791,
+        "lines_of_code": 795,
         "lines_of_comments": 0,
-        "blank_lines": 151,
+        "blank_lines": 179,
         "average_file_size": 28,
-        "complexity_estimate": 7.91,
+        "complexity_estimate": 7.95,
         "average_cyclomatic": 0.0,
         "average_cognitive": 0.0,
         "max_cyclomatic": 0,
@@ -3959,6 +4024,7 @@
       "Makefile": 0.3,
       "PNPM.md": 0.5,
       "README.md": 0.8,
+      "TODO.terminal.md": 0.5,
       "cliff.toml": 0.3,
       "codex-cli/Dockerfile": 0.3,
       "codex-cli/package-lock.json": 0.3,
@@ -3977,6 +4043,7 @@
       "codex-rs/ansi-escape/src/lib.rs": 1.0,
       "codex-rs/apply-patch/Cargo.toml": 0.3,
       "codex-rs/apply-patch/src/cli.rs": 1.0,
+      "codex-rs/apply-patch/src/history.rs": 1.0,
       "codex-rs/apply-patch/src/interactive.rs": 1.0,
       "codex-rs/apply-patch/src/lib.rs": 1.0,
       "codex-rs/apply-patch/src/main.rs": 1.0,
@@ -4012,6 +4079,7 @@
       "codex-rs/cli/src/mcp/signing.rs": 1.0,
       "codex-rs/cli/src/mcp/wizard.rs": 1.0,
       "codex-rs/cli/src/mcp_cmd.rs": 1.0,
+      "codex-rs/cli/src/memory_cmd.rs": 1.0,
       "codex-rs/cli/src/orchestrator_cmd.rs": 1.0,
       "codex-rs/cli/src/pipeline_cmd.rs": 1.0,
       "codex-rs/cli/src/proto.rs": 1.0,
@@ -4041,6 +4109,7 @@
       "codex-rs/core/prompt.md": 0.5,
       "codex-rs/core/review_prompt.md": 0.5,
       "codex-rs/core/src/auth.rs": 1.0,
+      "codex-rs/core/src/auth_backup.rs": 1.0,
       "codex-rs/core/src/bash.rs": 1.0,
       "codex-rs/core/src/chat_completions.rs": 1.0,
       "codex-rs/core/src/client.rs": 1.0,
@@ -4374,6 +4443,7 @@
       "codex-rs/tui/src/onboarding/trust_directory.rs": 1.0,
       "codex-rs/tui/src/onboarding/welcome.rs": 1.0,
       "codex-rs/tui/src/pager_overlay.rs": 1.0,
+      "codex-rs/tui/src/progressive_disclosure.rs": 1.0,
       "codex-rs/tui/src/render/highlight.rs": 1.0,
       "codex-rs/tui/src/render/line_utils.rs": 1.0,
       "codex-rs/tui/src/render/mod.rs": 1.0,
@@ -4472,23 +4542,27 @@
       "scripts/docsearch/__init__.py": 0.9,
       "scripts/docsearch/common.py": 0.9,
       "scripts/docsearch/index.py": 1.0,
+      "scripts/docsearch/memory.py": 0.9,
       "scripts/docsearch/query.py": 0.9,
       "scripts/docsearch/tests/test_chunking.py": 0.7,
       "scripts/readme_toc.py": 0.9,
+      "tests/README.md": 0.7,
+      "tests/run_apply_patch_demo.sh": 0.7,
+      "todo.machine.md": 0.5,
       "todo.md": 0.5
     },
-    "project_complexity_score": 1.3822849,
-    "test_coverage_estimate": 0.19619048,
-    "documentation_ratio": 0.13904762,
-    "average_cyclomatic_complexity": 26.841398,
-    "average_cognitive_complexity": 31.282259,
-    "max_cyclomatic_complexity": 463,
-    "max_cognitive_complexity": 429,
-    "high_complexity_files": 13,
+    "project_complexity_score": 1.4789282,
+    "test_coverage_estimate": 0.19662921,
+    "documentation_ratio": 0.1423221,
+    "average_cyclomatic_complexity": 29.436508,
+    "average_cognitive_complexity": 34.851852,
+    "max_cyclomatic_complexity": 469,
+    "max_cognitive_complexity": 447,
+    "high_complexity_files": 16,
     "complexity_distribution": {
-      "low_complexity": 308,
-      "medium_complexity": 51,
-      "high_complexity": 13,
+      "low_complexity": 307,
+      "medium_complexity": 55,
+      "high_complexity": 16,
       "extreme_complexity": 0
     }
   },
@@ -4541,10 +4615,10 @@
     "Makefile": {
       "path": "Makefile",
       "modified_time": {
-        "secs_since_epoch": 1758303964,
-        "nanos_since_epoch": 988001100
+        "secs_since_epoch": 1758318502,
+        "nanos_since_epoch": 670821900
       },
-      "size": 2486,
+      "size": 3093,
       "hash": null
     },
     "PNPM.md": {
@@ -4563,6 +4637,15 @@
         "nanos_since_epoch": 455009700
       },
       "size": 4498,
+      "hash": null
+    },
+    "TODO.terminal.md": {
+      "path": "TODO.terminal.md",
+      "modified_time": {
+        "secs_since_epoch": 1758319431,
+        "nanos_since_epoch": 796708900
+      },
+      "size": 4336,
       "hash": null
     },
     "cliff.toml": {
@@ -4658,10 +4741,10 @@
     "codex-rs/Cargo.lock": {
       "path": "codex-rs/Cargo.lock",
       "modified_time": {
-        "secs_since_epoch": 1758310402,
-        "nanos_since_epoch": 352508300
+        "secs_since_epoch": 1758326451,
+        "nanos_since_epoch": 422162900
       },
-      "size": 187097,
+      "size": 187150,
       "hash": null
     },
     "codex-rs/Cargo.toml": {
@@ -4712,38 +4795,47 @@
     "codex-rs/apply-patch/Cargo.toml": {
       "path": "codex-rs/apply-patch/Cargo.toml",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 460051400
+        "secs_since_epoch": 1758321843,
+        "nanos_since_epoch": 49639800
       },
-      "size": 464,
+      "size": 551,
       "hash": null
     },
     "codex-rs/apply-patch/src/cli.rs": {
       "path": "codex-rs/apply-patch/src/cli.rs",
       "modified_time": {
-        "secs_since_epoch": 1758316993,
-        "nanos_since_epoch": 41305700
+        "secs_since_epoch": 1758323138,
+        "nanos_since_epoch": 740999600
       },
-      "size": 8334,
+      "size": 8382,
+      "hash": null
+    },
+    "codex-rs/apply-patch/src/history.rs": {
+      "path": "codex-rs/apply-patch/src/history.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758323168,
+        "nanos_since_epoch": 523222700
+      },
+      "size": 6288,
       "hash": null
     },
     "codex-rs/apply-patch/src/interactive.rs": {
       "path": "codex-rs/apply-patch/src/interactive.rs",
       "modified_time": {
-        "secs_since_epoch": 1758316938,
-        "nanos_since_epoch": 320691800
+        "secs_since_epoch": 1758323668,
+        "nanos_since_epoch": 527362300
       },
-      "size": 2569,
+      "size": 9172,
       "hash": null
     },
     "codex-rs/apply-patch/src/lib.rs": {
       "path": "codex-rs/apply-patch/src/lib.rs",
       "modified_time": {
-        "secs_since_epoch": 1758317743,
-        "nanos_since_epoch": 843711200
+        "secs_since_epoch": 1758321450,
+        "nanos_since_epoch": 353205500
       },
-      "size": 61477,
-      "hash": "8044fe8170aa67ec2b2d00093b56c7aacdbfcbeafda6a77d6cd12102a657ede9"
+      "size": 63367,
+      "hash": "ebbb01081f3f2969b20c8819dd7abf8958640a9f462e4db57212746c7cb46fe1"
     },
     "codex-rs/apply-patch/src/main.rs": {
       "path": "codex-rs/apply-patch/src/main.rs",
@@ -4775,10 +4867,10 @@
     "codex-rs/apply-patch/src/standalone_executable.rs": {
       "path": "codex-rs/apply-patch/src/standalone_executable.rs",
       "modified_time": {
-        "secs_since_epoch": 1758317004,
-        "nanos_since_epoch": 311353700
+        "secs_since_epoch": 1758320558,
+        "nanos_since_epoch": 638584200
       },
-      "size": 2239,
+      "size": 18519,
       "hash": null
     },
     "codex-rs/apply-patch/tests/all.rs": {
@@ -4793,10 +4885,10 @@
     "codex-rs/apply-patch/tests/suite/cli.rs": {
       "path": "codex-rs/apply-patch/tests/suite/cli.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 461051000
+        "secs_since_epoch": 1758321959,
+        "nanos_since_epoch": 849219300
       },
-      "size": 2527,
+      "size": 4438,
       "hash": null
     },
     "codex-rs/apply-patch/tests/suite/mod.rs": {
@@ -4955,10 +5047,10 @@
     "codex-rs/cli/src/doc_cmd.rs": {
       "path": "codex-rs/cli/src/doc_cmd.rs",
       "modified_time": {
-        "secs_since_epoch": 1758317249,
-        "nanos_since_epoch": 757930100
+        "secs_since_epoch": 1758328760,
+        "nanos_since_epoch": 700753100
       },
-      "size": 10824,
+      "size": 10764,
       "hash": null
     },
     "codex-rs/cli/src/exit_status.rs": {
@@ -4991,11 +5083,11 @@
     "codex-rs/cli/src/main.rs": {
       "path": "codex-rs/cli/src/main.rs",
       "modified_time": {
-        "secs_since_epoch": 1758316022,
-        "nanos_since_epoch": 939850400
+        "secs_since_epoch": 1758328626,
+        "nanos_since_epoch": 610370800
       },
-      "size": 17262,
-      "hash": "599d0bbcb8394e3b667a96b0781d7f599729de32e09c245bb0e1d04369ab0751"
+      "size": 17503,
+      "hash": "538abfdf93f900e36915275678a1395db8204a083689c76c3b380d8eff8ea1d5"
     },
     "codex-rs/cli/src/mcp/cli.rs": {
       "path": "codex-rs/cli/src/mcp/cli.rs",
@@ -5040,6 +5132,15 @@
         "nanos_since_epoch": 173717900
       },
       "size": 22309,
+      "hash": null
+    },
+    "codex-rs/cli/src/memory_cmd.rs": {
+      "path": "codex-rs/cli/src/memory_cmd.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758328626,
+        "nanos_since_epoch": 633654100
+      },
+      "size": 12499,
       "hash": null
     },
     "codex-rs/cli/src/orchestrator_cmd.rs": {
@@ -5243,10 +5344,10 @@
     "codex-rs/core/Cargo.toml": {
       "path": "codex-rs/core/Cargo.toml",
       "modified_time": {
-        "secs_since_epoch": 1758296165,
-        "nanos_since_epoch": 440177000
+        "secs_since_epoch": 1758326435,
+        "nanos_since_epoch": 393646300
       },
-      "size": 2708,
+      "size": 2725,
       "hash": null
     },
     "codex-rs/core/README.md": {
@@ -5279,10 +5380,10 @@
     "codex-rs/core/prompt.md": {
       "path": "codex-rs/core/prompt.md",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 468594600
+        "secs_since_epoch": 1758329735,
+        "nanos_since_epoch": 24634900
       },
-      "size": 24710,
+      "size": 24822,
       "hash": null
     },
     "codex-rs/core/review_prompt.md": {
@@ -5297,10 +5398,19 @@
     "codex-rs/core/src/auth.rs": {
       "path": "codex-rs/core/src/auth.rs",
       "modified_time": {
-        "secs_since_epoch": 1758317386,
-        "nanos_since_epoch": 416559000
+        "secs_since_epoch": 1758326432,
+        "nanos_since_epoch": 199777600
       },
-      "size": 43246,
+      "size": 44522,
+      "hash": null
+    },
+    "codex-rs/core/src/auth_backup.rs": {
+      "path": "codex-rs/core/src/auth_backup.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758325812,
+        "nanos_since_epoch": 739664100
+      },
+      "size": 57695,
       "hash": null
     },
     "codex-rs/core/src/bash.rs": {
@@ -5342,10 +5452,10 @@
     "codex-rs/core/src/codex.rs": {
       "path": "codex-rs/core/src/codex.rs",
       "modified_time": {
-        "secs_since_epoch": 1758298236,
-        "nanos_since_epoch": 943906600
+        "secs_since_epoch": 1758329496,
+        "nanos_since_epoch": 531515500
       },
-      "size": 143690,
+      "size": 144366,
       "hash": null
     },
     "codex-rs/core/src/codex/compact.rs": {
@@ -5603,11 +5713,11 @@
     "codex-rs/core/src/lib.rs": {
       "path": "codex-rs/core/src/lib.rs",
       "modified_time": {
-        "secs_since_epoch": 1758279274,
-        "nanos_since_epoch": 267851100
+        "secs_since_epoch": 1758326461,
+        "nanos_since_epoch": 570683200
       },
       "size": 3302,
-      "hash": "a2afeb885536c685743438d70973c2e60634b7830d4629fca760f4d650ff4980"
+      "hash": "0d91b146c15065ecf6817d0dff843fad501c2e9320eb3e8a3b5f3ff40b9a9ddf"
     },
     "codex-rs/core/src/mcp/health.rs": {
       "path": "codex-rs/core/src/mcp/health.rs",
@@ -5981,8 +6091,8 @@
     "codex-rs/core/src/security/mod.rs": {
       "path": "codex-rs/core/src/security/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758277120,
-        "nanos_since_epoch": 179348400
+        "secs_since_epoch": 1758318350,
+        "nanos_since_epoch": 425837800
       },
       "size": 25973,
       "hash": null
@@ -6971,10 +7081,10 @@
     "codex-rs/gui/src/ui/mod.rs": {
       "path": "codex-rs/gui/src/ui/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758314074,
-        "nanos_since_epoch": 918255800
+        "secs_since_epoch": 1758319617,
+        "nanos_since_epoch": 747289600
       },
-      "size": 16347,
+      "size": 16343,
       "hash": null
     },
     "codex-rs/gui/tests/smoke.rs": {
@@ -7781,10 +7891,10 @@
     "codex-rs/todo.machine.md": {
       "path": "codex-rs/todo.machine.md",
       "modified_time": {
-        "secs_since_epoch": 1758316533,
-        "nanos_since_epoch": 323967500
+        "secs_since_epoch": 1758320048,
+        "nanos_since_epoch": 556065700
       },
-      "size": 9553,
+      "size": 10078,
       "hash": null
     },
     "codex-rs/tui/Cargo.toml": {
@@ -7808,10 +7918,10 @@
     "codex-rs/tui/src/app.rs": {
       "path": "codex-rs/tui/src/app.rs",
       "modified_time": {
-        "secs_since_epoch": 1758316189,
-        "nanos_since_epoch": 531573700
+        "secs_since_epoch": 1758323477,
+        "nanos_since_epoch": 12894700
       },
-      "size": 48352,
+      "size": 48336,
       "hash": null
     },
     "codex-rs/tui/src/app_backtrack.rs": {
@@ -7826,10 +7936,10 @@
     "codex-rs/tui/src/app_event.rs": {
       "path": "codex-rs/tui/src/app_event.rs",
       "modified_time": {
-        "secs_since_epoch": 1758314723,
-        "nanos_since_epoch": 570981500
+        "secs_since_epoch": 1758323778,
+        "nanos_since_epoch": 178064500
       },
-      "size": 2985,
+      "size": 3009,
       "hash": null
     },
     "codex-rs/tui/src/app_event_sender.rs": {
@@ -7871,10 +7981,10 @@
     "codex-rs/tui/src/bottom_pane/chat_composer.rs": {
       "path": "codex-rs/tui/src/bottom_pane/chat_composer.rs",
       "modified_time": {
-        "secs_since_epoch": 1758315663,
-        "nanos_since_epoch": 855805000
+        "secs_since_epoch": 1758321549,
+        "nanos_since_epoch": 729649100
       },
-      "size": 98282,
+      "size": 95832,
       "hash": null
     },
     "codex-rs/tui/src/bottom_pane/chat_composer_history.rs": {
@@ -7916,10 +8026,10 @@
     "codex-rs/tui/src/bottom_pane/mod.rs": {
       "path": "codex-rs/tui/src/bottom_pane/mod.rs",
       "modified_time": {
-        "secs_since_epoch": 1758315686,
-        "nanos_since_epoch": 923595200
+        "secs_since_epoch": 1758331204,
+        "nanos_since_epoch": 773035500
       },
-      "size": 26762,
+      "size": 29358,
       "hash": null
     },
     "codex-rs/tui/src/bottom_pane/paste_burst.rs": {
@@ -7970,10 +8080,10 @@
     "codex-rs/tui/src/chatwidget.rs": {
       "path": "codex-rs/tui/src/chatwidget.rs",
       "modified_time": {
-        "secs_since_epoch": 1758315713,
-        "nanos_since_epoch": 660930700
+        "secs_since_epoch": 1758327852,
+        "nanos_since_epoch": 600032100
       },
-      "size": 63345,
+      "size": 65077,
       "hash": null
     },
     "codex-rs/tui/src/chatwidget/agent.rs": {
@@ -8006,10 +8116,10 @@
     "codex-rs/tui/src/chatwidget/tests.rs": {
       "path": "codex-rs/tui/src/chatwidget/tests.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 570161500
+        "secs_since_epoch": 1758330951,
+        "nanos_since_epoch": 390016900
       },
-      "size": 69295,
+      "size": 67434,
       "hash": null
     },
     "codex-rs/tui/src/citation_regex.rs": {
@@ -8069,10 +8179,10 @@
     "codex-rs/tui/src/file_explorer.rs": {
       "path": "codex-rs/tui/src/file_explorer.rs",
       "modified_time": {
-        "secs_since_epoch": 1758316371,
-        "nanos_since_epoch": 818868100
+        "secs_since_epoch": 1758323806,
+        "nanos_since_epoch": 971812700
       },
-      "size": 21732,
+      "size": 24077,
       "hash": null
     },
     "codex-rs/tui/src/file_search.rs": {
@@ -8132,11 +8242,11 @@
     "codex-rs/tui/src/lib.rs": {
       "path": "codex-rs/tui/src/lib.rs",
       "modified_time": {
-        "secs_since_epoch": 1758314933,
-        "nanos_since_epoch": 57840200
+        "secs_since_epoch": 1758325376,
+        "nanos_since_epoch": 243131400
       },
-      "size": 22816,
-      "hash": "ee432dd753b7a25514a9b184d5c5edcc7c0890182169854857e9b285cac55214"
+      "size": 22844,
+      "hash": "b20adc4206090f00f57edd23a5245652334cdaf3a8da1b8b0b0a480ba841cae2"
     },
     "codex-rs/tui/src/live_wrap.rs": {
       "path": "codex-rs/tui/src/live_wrap.rs",
@@ -8300,6 +8410,15 @@
       "size": 22983,
       "hash": null
     },
+    "codex-rs/tui/src/progressive_disclosure.rs": {
+      "path": "codex-rs/tui/src/progressive_disclosure.rs",
+      "modified_time": {
+        "secs_since_epoch": 1758331246,
+        "nanos_since_epoch": 364490000
+      },
+      "size": 14417,
+      "hash": null
+    },
     "codex-rs/tui/src/render/highlight.rs": {
       "path": "codex-rs/tui/src/render/highlight.rs",
       "modified_time": {
@@ -8366,10 +8485,10 @@
     "codex-rs/tui/src/status_bar.rs": {
       "path": "codex-rs/tui/src/status_bar.rs",
       "modified_time": {
-        "secs_since_epoch": 1758309232,
-        "nanos_since_epoch": 176324600
+        "secs_since_epoch": 1758331255,
+        "nanos_since_epoch": 831232900
       },
-      "size": 6984,
+      "size": 16719,
       "hash": null
     },
     "codex-rs/tui/src/status_indicator_widget.rs": {
@@ -8465,10 +8584,10 @@
     "codex-rs/tui/src/ui_consts.rs": {
       "path": "codex-rs/tui/src/ui_consts.rs",
       "modified_time": {
-        "secs_since_epoch": 1758093196,
-        "nanos_since_epoch": 584308000
+        "secs_since_epoch": 1758325161,
+        "nanos_since_epoch": 367124500
       },
-      "size": 486,
+      "size": 5663,
       "hash": null
     },
     "codex-rs/tui/src/updates.rs": {
@@ -8834,10 +8953,10 @@
     "docs/getting-started.md": {
       "path": "docs/getting-started.md",
       "modified_time": {
-        "secs_since_epoch": 1758316465,
-        "nanos_since_epoch": 129107200
+        "secs_since_epoch": 1758328575,
+        "nanos_since_epoch": 694578600
       },
-      "size": 7750,
+      "size": 8431,
       "hash": null
     },
     "docs/install.md": {
@@ -9086,10 +9205,10 @@
     "hook-input-debug.json": {
       "path": "hook-input-debug.json",
       "modified_time": {
-        "secs_since_epoch": 1758317386,
-        "nanos_since_epoch": 317475900
+        "secs_since_epoch": 1758361931,
+        "nanos_since_epoch": 872739000
       },
-      "size": 55446,
+      "size": 4169,
       "hash": null
     },
     "mcp-ui.md": {
@@ -9182,11 +9301,20 @@
       "size": 3292,
       "hash": null
     },
+    "scripts/docsearch/memory.py": {
+      "path": "scripts/docsearch/memory.py",
+      "modified_time": {
+        "secs_since_epoch": 1758327254,
+        "nanos_since_epoch": 290454900
+      },
+      "size": 19600,
+      "hash": null
+    },
     "scripts/docsearch/query.py": {
       "path": "scripts/docsearch/query.py",
       "modified_time": {
-        "secs_since_epoch": 1758317743,
-        "nanos_since_epoch": 652490200
+        "secs_since_epoch": 1758317865,
+        "nanos_since_epoch": 910078300
       },
       "size": 3217,
       "hash": null
@@ -9209,6 +9337,33 @@
       "size": 3885,
       "hash": null
     },
+    "tests/README.md": {
+      "path": "tests/README.md",
+      "modified_time": {
+        "secs_since_epoch": 1758323607,
+        "nanos_since_epoch": 528820000
+      },
+      "size": 468,
+      "hash": null
+    },
+    "tests/run_apply_patch_demo.sh": {
+      "path": "tests/run_apply_patch_demo.sh",
+      "modified_time": {
+        "secs_since_epoch": 1758323582,
+        "nanos_since_epoch": 168593500
+      },
+      "size": 707,
+      "hash": null
+    },
+    "todo.machine.md": {
+      "path": "todo.machine.md",
+      "modified_time": {
+        "secs_since_epoch": 1758360508,
+        "nanos_since_epoch": 47362900
+      },
+      "size": 1291,
+      "hash": null
+    },
     "todo.md": {
       "path": "todo.md",
       "modified_time": {
@@ -9219,9 +9374,9 @@
       "hash": null
     }
   },
-  "cache_timestamp": 1758317835,
+  "cache_timestamp": 1758361932,
   "last_modified": {
-    "secs_since_epoch": 1758317835,
-    "nanos_since_epoch": 69818100
+    "secs_since_epoch": 1758361932,
+    "nanos_since_epoch": 51379500
   }
 }

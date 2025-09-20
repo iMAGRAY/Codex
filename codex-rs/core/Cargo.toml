@@ -27,6 +27,7 @@ ed25519-dalek = { version = "2", features = ["std"] }
 dirs = "6"
 env-flags = "0.1.1"
 eventsource-stream = "0.2.3"
+fastrand = "2.1"
 futures = "0.3"
 fs2 = "0.4.3"
 libc = "0.2.175"

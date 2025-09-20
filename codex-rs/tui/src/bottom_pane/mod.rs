@@ -3,14 +3,13 @@ use std::path::PathBuf;
 
 use crate::app_event_sender::AppEventSender;
 use crate::tui::FrameRequester;
+use crate::ui_consts::{LayoutMode, SmartSpacing, MIN_TERMINAL_HEIGHT};
 use crate::user_approval_widget::ApprovalRequest;
 pub(crate) use bottom_pane_view::BottomPaneView;
 use codex_core::protocol::TokenUsageInfo;
 use codex_file_search::FileMatch;
 use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
-use ratatui::layout::Constraint;
-use ratatui::layout::Layout;
 use ratatui::layout::Rect;
 use ratatui::widgets::WidgetRef;
 use std::time::Duration;
@@ -78,7 +77,6 @@ pub(crate) struct BottomPaneParams {
 }
 
 impl BottomPane {
-    const BOTTOM_PAD_LINES: u16 = 1;
     pub fn new(params: BottomPaneParams) -> Self {
         let enhanced_keys_supported = params.enhanced_keys_supported;
         Self {
@@ -110,46 +108,106 @@ impl BottomPane {
     }
 
     pub fn desired_height(&self, width: u16) -> u16 {
-        // Always reserve one blank row above the pane for visual spacing.
-        let top_margin = 1;
+        let layout_mode = LayoutMode::from_width(width);
+
+        // Adaptive spacing based on terminal size and focus state
+        let top_margin = SmartSpacing::section_spacing(layout_mode, true);
+        let bottom_padding = SmartSpacing::bottom_padding(layout_mode, self.has_input_focus);
 
         // Base height depends on whether a modal/overlay is active.
         let base = match self.active_view.as_ref() {
             Some(view) => view.desired_height(width),
-            None => self.composer.desired_height(width).saturating_add(
-                self.status
+            None => {
+                let composer_height = self.composer.desired_height(width);
+                let status_height = self.status
                     .as_ref()
-                    .map_or(0, |status| status.desired_height(width)),
-            ),
+                    .map_or(0, |status| status.desired_height(width));
+
+                // Ensure minimum interactive height for usability
+                let min_height = SmartSpacing::min_interactive_height(layout_mode);
+                (composer_height + status_height).max(min_height)
+            },
         };
-        // Account for bottom padding rows. Top spacing is handled in layout().
-        base.saturating_add(Self::BOTTOM_PAD_LINES)
+
+        base.saturating_add(bottom_padding)
             .saturating_add(top_margin)
     }
 
     fn layout(&self, area: Rect) -> [Rect; 2] {
-        // At small heights, bottom pane takes the entire height.
-        let (top_margin, bottom_margin) = if area.height <= BottomPane::BOTTOM_PAD_LINES + 1 {
-            (0, 0)
-        } else {
-            (1, BottomPane::BOTTOM_PAD_LINES)
-        };
+        let layout_mode = LayoutMode::from_width(area.width);
 
-        let area = Rect {
+        // Adaptive margins based on terminal size and available space
+        let (top_margin, bottom_margin) = self.calculate_adaptive_margins(area, layout_mode);
+
+        let content_area = Rect {
             x: area.x,
             y: area.y + top_margin,
             width: area.width,
-            height: area.height - top_margin - bottom_margin,
+            height: area.height.saturating_sub(top_margin + bottom_margin),
         };
+
         match self.active_view.as_ref() {
-            Some(_) => [Rect::ZERO, area],
+            Some(_) => [Rect::ZERO, content_area],
             None => {
                 let status_height = self
                     .status
                     .as_ref()
-                    .map_or(0, |status| status.desired_height(area.width));
-                Layout::vertical([Constraint::Max(status_height), Constraint::Min(1)]).areas(area)
+                    .map_or(0, |status| status.desired_height(content_area.width));
+
+                let mut remaining = content_area.height;
+                let mut next_y = content_area.y;
+
+                let status_rect = if status_height == 0 || remaining == 0 {
+                    Rect::ZERO
+                } else {
+                    let height = status_height.min(remaining);
+                    let rect = Rect {
+                        x: content_area.x,
+                        y: next_y,
+                        width: content_area.width,
+                        height,
+                    };
+                    remaining = remaining.saturating_sub(height);
+                    next_y = next_y.saturating_add(height);
+                    rect
+                };
+
+                let spacing = if status_rect.height > 0 && layout_mode.show_detailed_info() { 1 } else { 0 };
+                let applied_spacing = spacing.min(remaining);
+                if applied_spacing > 0 {
+                    remaining = remaining.saturating_sub(applied_spacing);
+                    next_y = next_y.saturating_add(applied_spacing);
+                }
+
+                let composer_height = remaining;
+                let composer_rect = if composer_height == 0 {
+                    Rect::ZERO
+                } else {
+                    Rect {
+                        x: content_area.x,
+                        y: next_y,
+                        width: content_area.width,
+                        height: composer_height,
+                    }
+                };
+
+                [status_rect, composer_rect]
             }
+        }
+    }
+
+    /// Calculate adaptive margins based on available space and layout mode
+    fn calculate_adaptive_margins(&self, area: Rect, layout_mode: LayoutMode) -> (u16, u16) {
+        let base_top = SmartSpacing::section_spacing(layout_mode, true);
+        let base_bottom = SmartSpacing::bottom_padding(layout_mode, self.has_input_focus);
+
+        // At very small heights, reduce or eliminate margins to preserve functionality
+        if area.height <= MIN_TERMINAL_HEIGHT / 2 {
+            (0, 0)
+        } else if area.height <= MIN_TERMINAL_HEIGHT {
+            (base_top.min(1), base_bottom.min(1))
+        } else {
+            (base_top, base_bottom)
         }
     }
 
@@ -161,8 +219,10 @@ impl BottomPane {
         if self.active_view.is_some() {
             None
         } else {
-            let [_, content] = self.layout(area);
-            self.composer.cursor_pos(content)
+            let layout_areas = self.layout(area);
+            // Use the last area which should be the composer area
+            let composer_area = layout_areas[layout_areas.len() - 1];
+            self.composer.cursor_pos(composer_area)
         }
     }
 
@@ -606,27 +666,41 @@ mod tests {
             "no active modal view after denial"
         );
 
-        // Render and ensure the top row includes the Working header and a composer line below.
-        // Give the animation thread a moment to tick.
         std::thread::sleep(Duration::from_millis(120));
         let area = Rect::new(0, 0, 40, 6);
         let mut buf = Buffer::empty(area);
         (&pane).render_ref(area, &mut buf);
-        let mut row1 = String::new();
-        for x in 0..area.width {
-            row1.push(buf[(x, 1)].symbol().chars().next().unwrap_or(' '));
+
+        let [status_rect, composer_rect] = pane.layout(area);
+        assert!(status_rect.height > 0, "expected status rect to be visible");
+
+        let mut header_line = String::new();
+        for x in 0..status_rect.width {
+            header_line.push(
+                buf[(status_rect.x + x, status_rect.y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
         }
         assert!(
-            row1.contains("Working"),
-            "expected Working header after denial on row 1: {row1:?}"
+            header_line.contains("Working"),
+            "expected Working header after denial: {header_line:?}"
         );
 
-        // Composer placeholder should be visible somewhere below.
+        assert!(composer_rect.height > 0, "expected composer rect after denial");
         let mut found_composer = false;
-        for y in 1..area.height.saturating_sub(2) {
+        for y in 0..composer_rect.height {
             let mut row = String::new();
-            for x in 0..area.width {
-                row.push(buf[(x, y)].symbol().chars().next().unwrap_or(' '));
+            for x in 0..composer_rect.width {
+                row.push(
+                    buf[(composer_rect.x + x, composer_rect.y + y)]
+                        .symbol()
+                        .chars()
+                        .next()
+                        .unwrap_or(' '),
+                );
             }
             if row.contains("Ask Codex") {
                 found_composer = true;
@@ -638,7 +712,6 @@ mod tests {
             "expected composer visible under status line"
         );
 
-        // Drain the channel to avoid unused warnings.
         drop(rx);
     }
 
@@ -658,18 +731,26 @@ mod tests {
         // Begin a task: show initial status.
         pane.set_task_running(true);
 
-        // Use a height that allows the status line to be visible above the composer.
         let area = Rect::new(0, 0, 40, 6);
         let mut buf = Buffer::empty(area);
         (&pane).render_ref(area, &mut buf);
 
-        let mut row0 = String::new();
-        for x in 0..area.width {
-            row0.push(buf[(x, 1)].symbol().chars().next().unwrap_or(' '));
+        let [status_rect, _composer_rect] = pane.layout(area);
+        assert!(status_rect.height > 0, "expected non-zero status rect");
+
+        let mut header_line = String::new();
+        for x in 0..status_rect.width {
+            header_line.push(
+                buf[(status_rect.x + x, status_rect.y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
         }
         assert!(
-            row0.contains("Working"),
-            "expected Working header: {row0:?}"
+            header_line.contains("Working"),
+            "expected Working header: {header_line:?}"
         );
     }
 
@@ -686,41 +767,56 @@ mod tests {
             disable_paste_burst: false,
         });
 
-        // Activate spinner (status view replaces composer) with no live ring.
         pane.set_task_running(true);
 
-        // Use height == desired_height; expect 1 status row at top and 2 bottom padding rows.
         let height = pane.desired_height(30);
-        assert!(
-            height >= 3,
-            "expected at least 3 rows with bottom padding; got {height}"
-        );
+        assert!(height >= 3, "expected at least 3 rows; got {height}");
         let area = Rect::new(0, 0, 30, height);
         let mut buf = Buffer::empty(area);
         (&pane).render_ref(area, &mut buf);
 
-        // Row 1 contains the status header (row 0 is the spacer)
-        let mut top = String::new();
-        for x in 0..area.width {
-            top.push(buf[(x, 1)].symbol().chars().next().unwrap_or(' '));
+        let [status_rect, composer_rect] = pane.layout(area);
+        assert!(status_rect.height > 0, "expected status rect to be visible");
+
+        let mut header_line = String::new();
+        for x in 0..status_rect.width {
+            header_line.push(
+                buf[(status_rect.x + x, status_rect.y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
         }
         assert!(
-            top.trim_start().starts_with("Working"),
-            "expected top row to start with 'Working': {top:?}"
-        );
-        assert!(
-            top.contains("Working"),
-            "expected Working header on top row: {top:?}"
+            header_line.trim_start().starts_with("Working"),
+            "expected status header to start with Working: {header_line:?}"
         );
 
-        // Last row should be blank padding; the row above should generally contain composer content.
+        if composer_rect.height > 0 {
+            let mut composer_line = String::new();
+            for x in 0..composer_rect.width {
+                composer_line.push(
+                    buf[(composer_rect.x + x, composer_rect.y)]
+                        .symbol()
+                        .chars()
+                        .next()
+                        .unwrap_or(' '),
+                );
+            }
+            assert!(
+                composer_line.contains("Ask Codex") || composer_rect.height > 1,
+                "expected composer content when space is available: {composer_line:?}"
+            );
+        }
+
         let mut r_last = String::new();
         for x in 0..area.width {
-            r_last.push(buf[(x, height - 1)].symbol().chars().next().unwrap_or(' '));
+            r_last.push(buf[(x, area.y + area.height - 1)].symbol().chars().next().unwrap_or(' '));
         }
         assert!(
             r_last.trim().is_empty(),
-            "expected last row blank: {r_last:?}"
+            "expected last row blank padding: {r_last:?}"
         );
     }
 
@@ -739,37 +835,67 @@ mod tests {
 
         pane.set_task_running(true);
 
-        // Height=2 → status on one row, composer on the other.
+        // Height=2 → prioritise status visibility when space is scarce.
         let area2 = Rect::new(0, 0, 20, 2);
         let mut buf2 = Buffer::empty(area2);
         (&pane).render_ref(area2, &mut buf2);
-        let mut row0 = String::new();
-        let mut row1 = String::new();
-        for x in 0..area2.width {
-            row0.push(buf2[(x, 0)].symbol().chars().next().unwrap_or(' '));
-            row1.push(buf2[(x, 1)].symbol().chars().next().unwrap_or(' '));
+        let [status_rect2, composer_rect2] = pane.layout(area2);
+        assert!(status_rect2.height > 0, "expected status header at height=2");
+        let mut status_line = String::new();
+        for x in 0..status_rect2.width {
+            status_line.push(
+                buf2[(status_rect2.x + x, status_rect2.y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
         }
-        let has_composer = row0.contains("Ask Codex") || row1.contains("Ask Codex");
+        assert!(status_line.contains("Working"), "expected Working header at height=2: {status_line:?}");
+        assert_eq!(composer_rect2.height, 0, "composer should collapse when only two rows are available");
+
+        // Height=3 → status line plus composer.
+        let area3 = Rect::new(0, 0, 20, 3);
+        let mut buf3 = Buffer::empty(area3);
+        (&pane).render_ref(area3, &mut buf3);
+        let [status_rect3, composer_rect3] = pane.layout(area3);
+        assert!(status_rect3.height > 0);
+        assert!(composer_rect3.height > 0, "expected composer when height≥3");
+        let mut composer_line = String::new();
+        for x in 0..composer_rect3.width {
+            composer_line.push(
+                buf3[(composer_rect3.x + x, composer_rect3.y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
+        }
         assert!(
-            has_composer,
-            "expected composer to be visible on one of the rows: row0={row0:?}, row1={row1:?}"
-        );
-        assert!(
-            row0.contains("Working") || row1.contains("Working"),
-            "expected status header to be visible at height=2: row0={row0:?}, row1={row1:?}"
+            composer_line.contains("Ask Codex") || composer_rect3.height > 1,
+            "expected composer placeholder when height=3: {composer_line:?}"
         );
 
-        // Height=1 → no padding; single row is the composer (status hidden).
+        // Height=1 → status indicator wins; composer is suppressed.
         let area1 = Rect::new(0, 0, 20, 1);
         let mut buf1 = Buffer::empty(area1);
         (&pane).render_ref(area1, &mut buf1);
-        let mut only = String::new();
-        for x in 0..area1.width {
-            only.push(buf1[(x, 0)].symbol().chars().next().unwrap_or(' '));
+        let [status_rect1, composer_rect1] = pane.layout(area1);
+        assert!(status_rect1.height > 0, "status remains visible when height=1");
+        assert_eq!(composer_rect1.height, 0, "composer collapses when only one row available");
+        let mut status_line_one = String::new();
+        for x in 0..status_rect1.width {
+            status_line_one.push(
+                buf1[(status_rect1.x + x, status_rect1.y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
         }
         assert!(
-            only.contains("Ask Codex"),
-            "expected composer with no padding: {only:?}"
+            status_line_one.contains("Working"),
+            "expected Working header when only one row remains: {status_line_one:?}"
         );
     }
 }

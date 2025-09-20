@@ -2,8 +2,19 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{self, Context, Result, bail};
+use anyhow::{self, bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+
+fn validate_truncate_dim(value: &str) -> Result<usize, String> {
+    let parsed: usize = value
+        .parse()
+        .map_err(|_| format!("'{}' is not a valid number", value))?;
+    if (128..=768).contains(&parsed) {
+        Ok(parsed)
+    } else {
+        Err(format!("Value must be between 128 and 768, got {}", parsed))
+    }
+}
 
 const DEFAULT_INDEX_PATH: &str = "docs/.docsearch/index.jsonl";
 
@@ -74,7 +85,7 @@ struct DocIndexArgs {
     device: Option<DeviceArg>,
 
     /// Размерность эмбеддинга после усечения Matryoshka (768/512/256/128).
-    #[arg(long = "truncate-dim", value_name = "D", value_parser = clap::value_parser!(usize).range(128..=768))]
+    #[arg(long = "truncate-dim", value_name = "D", value_parser = validate_truncate_dim)]
     truncate_dim: Option<usize>,
 }
 
@@ -112,7 +123,6 @@ impl DocIndexArgs {
             args.push(device.as_str().into());
         }
         if let Some(dim) = self.truncate_dim {
-            validate_truncate_dim(dim)?;
             args.push("--truncate-dim".into());
             args.push(dim.to_string());
         }
@@ -146,7 +156,7 @@ struct DocSearchArgs {
     device: Option<DeviceArg>,
 
     /// Размерность эмбеддинга после усечения Matryoshka.
-    #[arg(long = "truncate-dim", value_name = "D", value_parser = clap::value_parser!(usize).range(128..=768))]
+    #[arg(long = "truncate-dim", value_name = "D", value_parser = validate_truncate_dim)]
     truncate_dim: Option<usize>,
 }
 
@@ -173,7 +183,6 @@ impl DocSearchArgs {
             args.push(device.as_str().into());
         }
         if let Some(dim) = self.truncate_dim {
-            validate_truncate_dim(dim)?;
             args.push("--truncate-dim".into());
             args.push(dim.to_string());
         }
@@ -216,15 +225,6 @@ fn needs_dependency_install(stderr: &str) -> bool {
         || stderr.contains("ImportError: No module named")
         || stderr.contains("No module named")
         || stderr.contains("sentence_transformers")
-        || stderr.contains("urllib3")
-        || stderr.contains("requests")
-}
-
-fn validate_truncate_dim(dim: usize) -> Result<()> {
-    match dim {
-        768 | 512 | 256 | 128 => Ok(()),
-        _ => bail!("unsupported truncate-dim: {dim}. Допустимые значения: 768, 512, 256, 128"),
-    }
 }
 
 pub fn run(cli: DocCli) -> Result<()> {
@@ -246,7 +246,7 @@ pub fn run(cli: DocCli) -> Result<()> {
                 .unwrap_or_else(|| PathBuf::from(DEFAULT_INDEX_PATH));
 
             if !index_path.exists() {
-                let mut index_args = DocIndexArgs {
+                let index_args = DocIndexArgs {
                     docs_root: Some(PathBuf::from("docs")),
                     output: Some(index_path.clone()),
                     min_chars: None,

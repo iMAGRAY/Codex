@@ -158,3 +158,21 @@ codex doc search "как аутентифицироваться" --show-text
 
 Use `--model-path` if EmbeddingGemma is in a custom location, and `--truncate-dim` to switch between 768/512/256/128 Matryoshka profiles.
 
+### Semantic memory (локально в `~/.codex/memory/memory.jsonl`)
+
+```bash
+# Сохранить вывод в память с тегами
+codex memory remember "apply_patch --dry-run перед любыми правками" --tag apply_patch --tag workflow
+
+# Посмотреть записи
+codex memory list --tag apply_patch
+
+# Семантический поиск по памяти
+codex memory search "как откатить патч" --show-text
+
+# Удалить записи по тегу или ID
+codex memory forget --tag workflow
+
+# Очистить память, оставив максимум 200 записей
+codex memory prune --max-records 200
+```

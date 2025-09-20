@@ -30,6 +30,7 @@ pub struct InteractiveRequest<'a> {
 
 #[derive(Debug, Error)]
 pub enum InteractiveError {
+    #[allow(dead_code)]
     #[error("Interactive mode requested but not supported in the current environment.")]
     Unsupported,
     #[error("Interactive selection aborted by user.")]
@@ -114,7 +115,7 @@ pub fn run_interactive(request: &InteractiveRequest) -> Result<Selection, Intera
     Ok(selection)
 }
 
-fn decide_update_chunks(hunk_index: usize, hunk: &Hunk) -> Result<HunkDecision, InteractiveError> {
+fn decide_update_chunks(_hunk_index: usize, hunk: &Hunk) -> Result<HunkDecision, InteractiveError> {
     match hunk {
         Hunk::UpdateFile { chunks, .. } if chunks.len() <= 1 => {
             if let Some(chunk) = chunks.first() {
@@ -256,6 +257,7 @@ enum HunkDecision {
 }
 
 /// Convert CLI invocation into an actionable plan without applying filesystem changes.
+#[allow(dead_code)]
 pub fn preview_hunks(
     verification: MaybeApplyPatchVerified,
 ) -> Result<Option<ApplyPatchAction>, ApplyPatchError> {

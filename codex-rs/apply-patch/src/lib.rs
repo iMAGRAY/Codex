@@ -18,7 +18,6 @@ pub use parser::ParseError;
 use parser::ParseError::*;
 pub use parser::UpdateFileChunk;
 pub use parser::parse_patch;
-use serde::{Deserialize, Serialize};
 use similar::TextDiff;
 use thiserror::Error;
 use tree_sitter::LanguageError;
@@ -680,6 +679,28 @@ pub enum ExtractHeredocError {
     HeredocNotUtf8(Utf8Error),
     FailedToParsePatchIntoAst,
     FailedToFindHeredocBody,
+}
+
+impl std::fmt::Display for ExtractHeredocError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExtractHeredocError::CommandDidNotStartWithApplyPatch => {
+                write!(f, "Command did not start with apply_patch")
+            }
+            ExtractHeredocError::FailedToLoadBashGrammar(err) => {
+                write!(f, "Failed to load bash grammar: {}", err)
+            }
+            ExtractHeredocError::HeredocNotUtf8(err) => {
+                write!(f, "Heredoc is not UTF-8: {}", err)
+            }
+            ExtractHeredocError::FailedToParsePatchIntoAst => {
+                write!(f, "Failed to parse patch into AST")
+            }
+            ExtractHeredocError::FailedToFindHeredocBody => {
+                write!(f, "Failed to find heredoc body")
+            }
+        }
+    }
 }
 
 /// Applies the patch and prints the result to stdout/stderr.

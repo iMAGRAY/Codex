@@ -20,12 +20,14 @@ use std::path::PathBuf;
 mod audit_cmd;
 mod doc_cmd;
 mod mcp_cmd;
+mod memory_cmd;
 mod orchestrator_cmd;
 mod pipeline_cmd;
 mod stellar_cmd;
 
 use crate::doc_cmd::DocCli;
 use crate::mcp_cmd::McpCli;
+use crate::memory_cmd::MemoryCli;
 use crate::orchestrator_cmd::OrchestratorCli;
 use crate::pipeline_cmd::PipelineCli;
 use crate::proto::ProtoCli;
@@ -90,6 +92,9 @@ enum Subcommand {
 
     /// Semantic documentation search helpers.
     Doc(DocCli),
+
+    /// Контекстная память на EmbeddingGemma.
+    Memory(MemoryCli),
 
     /// Generate shell completion scripts.
     Completion(CompletionCommand),
@@ -278,6 +283,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         }
         Some(Subcommand::Doc(doc_cli)) => {
             doc_cmd::run(doc_cli)?;
+        }
+        Some(Subcommand::Memory(memory_cli)) => {
+            memory_cmd::run(memory_cli)?;
         }
         Some(Subcommand::Completion(completion_cli)) => {
             print_completion(completion_cli);

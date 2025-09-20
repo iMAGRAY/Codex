@@ -129,7 +129,7 @@ async fn start_mock_server() -> MockServer {
 pub(super) const FIRST_REPLY: &str = "FIRST_REPLY";
 pub(super) const SUMMARY_TEXT: &str = "SUMMARY_ONLY_CONTEXT";
 pub(super) const SUMMARIZE_TRIGGER: &str = "Start Summarization";
-const SUMMARIZATION_PROMPT_PREFIX: &str = "You are preparing the `/compact` checkpoint";
+const SUMMARIZATION_PROMPT_PREFIX: &str = "You have exceeded the maximum number of tokens";
 const THIRD_USER_MSG: &str = "next turn";
 const AUTO_SUMMARY_TEXT: &str = "AUTO_SUMMARY";
 const FIRST_AUTO_MSG: &str = "token limit start";

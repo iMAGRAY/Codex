@@ -171,6 +171,7 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
         .as_str()
         .unwrap_or_default()
         .to_string();
+    let compact_instructions = include_str!("../../templates/compact/prompt.md").trim();
     let _user_turn_1 = json!(
     {
       "model": "gpt-5",
@@ -223,15 +224,7 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
     let _compact_1 = json!(
     {
       "model": "gpt-5",
-      "instructions": "You are preparing the `/compact` checkpoint for Codex CLI. Emit a single ASCII line no longer than 900 characters composed of semicolon-separated KEY=VALUE segments in this exact order: STATUS; TODO; NEXT; RISKS; TESTS; METRICS; DOCS. Follow these rules:
-- STATUS: ultra-concise recap of completed work, naming key files/modules and relevant requirements (e.g., REQ-*).
-- TODO: outstanding actions with paths and optional line numbers; if an update_plan exists echo each step as `plan:<status> <step>` preserving order; write `none` if empty.
-- NEXT: the immediate decision or follow-up the next agent should tackle; `none` if nothing.
-- RISKS: blockers, regressions, security or performance concerns; otherwise `none`.
-- TESTS: executed commands and pending ones marked `pending:<cmd>`; use `none` if nothing ran.
-- METRICS: pertinent metrics (latency, APDEX, SEC, MTTR) or `unknown`.
-- DOCS: documentation, specs or tags (AGENTS.md, REQ-*, @covers) critical for context; use `none` if nothing.
-Keep each VALUE maximally dense - no pleasantries, markdown, bullets, or redundant words. Replace newlines with spaces and avoid filler. Never deviate from the specified KEY order or format.",
+      "instructions": compact_instructions,
       "input": [
         {
           "type": "message",

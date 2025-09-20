@@ -1,0 +1,8 @@
+---
+source: tui/src/file_explorer.rs
+expression: "rows.join(\"\\n\")"
+---
+Files · workspace
+- workspace
+    README.md
+  + src

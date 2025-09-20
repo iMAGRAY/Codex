@@ -15,6 +15,7 @@ pub enum UndoError {
     Io(#[from] io::Error),
     #[error("Unable to serialize undo record: {0}")]
     Serialize(serde_json::Error),
+    #[allow(dead_code)]
     #[error("Undo history is empty.")]
     Empty,
     #[error("Undo record verification failed: {0}")]

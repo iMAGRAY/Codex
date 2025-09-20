@@ -238,6 +238,7 @@ fn make_chatwidget_manual() -> (
         config: cfg.clone(),
         auth_manager,
         session_header: SessionHeader::new(cfg.model.clone()),
+        status_bar: StatusBar::new(),
         initial_user_message: None,
         token_info: None,
         stream: StreamController::new(cfg),

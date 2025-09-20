@@ -2,7 +2,7 @@
 source: tui/src/chatwidget/tests.rs
 expression: terminal.backend()
 ---
-"Latency p95     0ms  Audit fallback 0  Cache hit 100.0%  Ctrl+O Observability   "
+"  Performance: 0ms | 100% cache                                                 "
 "                                                                                "
 "The model wants to apply changes                                                "
 "                                                                                "
@@ -10,4 +10,5 @@ expression: terminal.backend()
 "                                                                                "
 "▌Apply changes?                                                                 "
 "▌ Yes   No, provide feedback                                                    "
+"▌ Approve and apply the changes                                                 "
 "                                                                                "

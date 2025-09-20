@@ -77,6 +77,8 @@ use crate::mcp::McpWizardInit;
 use crate::mcp::McpWizardView;
 use crate::slash_command::SlashCommand;
 use crate::status_bar::StatusBar;
+use crate::progressive_disclosure::DisclosureContext;
+use crate::ui_consts::LayoutMode;
 use crate::text_formatting::truncate_text;
 use crate::tui::FrameRequester;
 // streaming internals are provided by crate::streaming and crate::markdown_stream
@@ -136,6 +138,7 @@ pub(crate) struct ChatWidget {
     config: Config,
     auth_manager: Arc<AuthManager>,
     session_header: SessionHeader,
+    status_bar: StatusBar,
     initial_user_message: Option<UserMessage>,
     token_info: Option<TokenUsageInfo>,
     // Stream lifecycle controller
@@ -270,6 +273,8 @@ impl ChatWidget {
         self.stream.reset_headers_for_new_turn();
         self.full_reasoning_buffer.clear();
         self.reasoning_buffer.clear();
+        // Update status bar context to show task running state
+        self.status_bar.set_context(DisclosureContext::TaskRunning);
         self.request_redraw();
     }
 
@@ -283,6 +288,8 @@ impl ChatWidget {
         // Mark task stopped and request redraw now that all content is in history.
         self.bottom_pane.set_task_running(false);
         self.running_commands.clear();
+        // Update status bar context back to idle state
+        self.status_bar.set_context(DisclosureContext::Idle);
         self.request_redraw();
 
         // If there is a queued user message, send exactly one now to begin the next turn.
@@ -313,7 +320,10 @@ impl ChatWidget {
     }
 
     fn on_error(&mut self, message: String) {
-        self.finalize_turn_with_error_message(message);
+        self.finalize_turn_with_error_message(message.clone());
+        // Update status bar context to error state and add error notification
+        self.status_bar.set_context(DisclosureContext::Error);
+        self.status_bar.add_error(&message);
         self.request_redraw();
 
         // After an error ends the turn, try sending the next queued input.
@@ -568,6 +578,7 @@ impl ChatWidget {
             command: ev.command,
             reason: ev.reason,
         };
+        self.status_bar.set_context(DisclosureContext::Modal);
         self.bottom_pane.push_approval_request(request);
         self.request_redraw();
     }
@@ -589,6 +600,7 @@ impl ChatWidget {
             reason: ev.reason,
             grant_root: ev.grant_root,
         };
+        self.status_bar.set_context(DisclosureContext::Modal);
         self.bottom_pane.push_approval_request(request);
         self.request_redraw();
         self.notify(Notification::EditApprovalRequested {
@@ -656,6 +668,8 @@ impl ChatWidget {
         if area.height == 0 {
             return [Rect::default(); 3];
         }
+
+        let layout_mode = LayoutMode::from_width(area.width);
         let header_height = 1u16.min(area.height);
         let available = area.height.saturating_sub(header_height);
         let bottom_min = self.bottom_pane.desired_height(area.width).min(available);
@@ -664,7 +678,15 @@ impl ChatWidget {
         let active_desired = self
             .active_exec_cell
             .as_ref()
-            .map_or(0, |c| c.desired_height(area.width) + 1);
+            .map_or(0, |c| {
+                let base_height = c.desired_height(area.width);
+                // Use compact widgets in narrow layouts to save space
+                if layout_mode.use_compact_widgets() {
+                    base_height.min(area.height / 3) + 1
+                } else {
+                    base_height + 1
+                }
+            });
         let active_height = active_desired.min(remaining);
 
         Layout::vertical([
@@ -708,6 +730,7 @@ impl ChatWidget {
             config: config.clone(),
             auth_manager,
             session_header: SessionHeader::new(config.model.clone()),
+            status_bar: StatusBar::new(),
             initial_user_message: create_initial_user_message(
                 initial_prompt.unwrap_or_default(),
                 initial_images,
@@ -764,6 +787,7 @@ impl ChatWidget {
             config: config.clone(),
             auth_manager,
             session_header: SessionHeader::new(config.model.clone()),
+            status_bar: StatusBar::new(),
             initial_user_message: create_initial_user_message(
                 initial_prompt.unwrap_or_default(),
                 initial_images,
@@ -834,6 +858,11 @@ impl ChatWidget {
                 }
             }
             _ => {
+                // Update status bar to show user is typing (for printable characters)
+                if let KeyEvent { code: KeyCode::Char(_), kind: KeyEventKind::Press, .. } = key_event {
+                    self.status_bar.set_context(DisclosureContext::UserTyping);
+                }
+
                 match self.bottom_pane.handle_key_event(key_event) {
                     InputResult::Submitted(text) => {
                         // If a task is running, queue the user input to be sent after the turn completes.
@@ -1365,12 +1394,18 @@ impl ChatWidget {
     }
 
     pub(crate) fn add_info_message(&mut self, message: String, hint: Option<String>) {
-        self.add_to_history(history_cell::new_info_event(message, hint));
+        // Show in history
+        self.add_to_history(history_cell::new_info_event(message.clone(), hint));
+        // Show temporary notification in status bar
+        self.status_bar.add_notification(&message, Duration::from_secs(3));
         self.request_redraw();
     }
 
     pub(crate) fn add_error_message(&mut self, message: String) {
-        self.add_to_history(history_cell::new_error_event(message));
+        // Show in history
+        self.add_to_history(history_cell::new_error_event(message.clone()));
+        // Show persistent error in status bar
+        self.status_bar.add_error(&message);
         self.request_redraw();
     }
 
@@ -1567,7 +1602,7 @@ impl ChatWidget {
 impl WidgetRef for &ChatWidget {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let [header_area, active_cell_area, bottom_pane_area] = self.layout_areas(area);
-        StatusBar::render(header_area, buf);
+        (&self.status_bar).render(header_area, buf);
         (&self.bottom_pane).render(bottom_pane_area, buf);
         if !active_cell_area.is_empty()
             && let Some(cell) = &self.active_exec_cell

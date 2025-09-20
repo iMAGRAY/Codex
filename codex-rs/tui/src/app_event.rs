@@ -93,6 +93,7 @@ pub(crate) enum AppEvent {
     },
 
     /// Request to open a file or directory from the explorer pane.
+    #[allow(dead_code)]
     OpenFilePath {
         path: PathBuf,
     },

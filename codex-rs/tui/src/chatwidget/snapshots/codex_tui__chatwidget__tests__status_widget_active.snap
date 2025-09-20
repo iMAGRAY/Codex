@@ -2,10 +2,11 @@
 source: tui/src/chatwidget/tests.rs
 expression: terminal.backend()
 ---
-"Latency p95     0ms  Audit fallback 0  Cache hit 100.0%  Ctrl+O Observability   "
+"  ⚡ Task active                                                                " Hidden by multi-width symbols: [(3, " ")]
 "                                                                                "
 "  Analyzing (0s • Esc to interrupt)                                             "
 "                                                                                "
 "▌ Ask Codex to do anything                                                      "
 "                                                                                "
+"⏎ send   ⌃J newline   ⌃T transcript   ⌃C quit                                   "
 "                                                                                "

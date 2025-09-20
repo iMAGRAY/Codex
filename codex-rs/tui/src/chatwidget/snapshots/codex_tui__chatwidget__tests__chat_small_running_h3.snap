@@ -2,6 +2,6 @@
 source: tui/src/chatwidget/tests.rs
 expression: terminal.backend()
 ---
-"Latency p95     0ms  Audit fallback 0  C"
+" ⚡ Task active                         " Hidden by multi-width symbols: [(2, " ")]
 "  Thinking (0s • Esc to interrupt)      "
-"▌ Ask Codex to do anything              "
+"                                        "

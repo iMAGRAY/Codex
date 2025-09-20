@@ -257,11 +257,19 @@ async fn patch_approval_triggers_elicitation() -> anyhow::Result<()> {
         },
     );
 
+    let orchestrator_instructions = format!(
+        "Orchestrator follow-up required for: {file}. Run codex orchestrator investigate --title {quote}{file}{quote} --severity sev2 --persona operator and then codex orchestrator feedback --persona operator.",
+        file = test_file
+            .file_name()
+            .unwrap()
+            .to_string_lossy(),
+        quote = '\"',
+    );
     let expected_elicitation_request = create_expected_patch_approval_elicitation_request(
         elicitation_request_id.clone(),
         expected_changes,
         None, // No grant_root expected
-        None, // No reason expected
+        Some(orchestrator_instructions.clone()),
         codex_request_id.to_string(),
         "1".to_string(),
     )?;

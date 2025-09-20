@@ -1,7 +1,7 @@
 use assert_cmd::prelude::*;
+use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
@@ -104,10 +104,11 @@ fn test_apply_patch_cli_stdin_add_and_update() -> anyhow::Result<()> {
 *** End Patch"#
     );
 
-    let mut cmd = Command::cargo_bin("apply_patch").expect("should find apply_patch binary");
-    cmd.current_dir(tmp.path());
-    cmd.arg("--yes");
-    cmd.write_stdin(update_patch)
+    Command::cargo_bin("apply_patch")
+        .expect("should find apply_patch binary")
+        .current_dir(tmp.path())
+        .arg("--yes")
+        .write_stdin(update_patch)
         .assert()
         .success()
         .stdout(predicate::str::contains(format!(
@@ -144,10 +145,12 @@ fn test_apply_patch_cli_dry_run() -> anyhow::Result<()> {
         .assert()
         .success()
         .stdout(predicate::str::contains(format!(
-            "Dry run summary:
-  A {file}
-"
-        )));
+            "Planned changes:
+  [0] {file}"
+        )))
+        .stdout(predicate::str::contains(
+            "Dry run completed – no files were changed",
+        ));
 
     assert!(!tmp.path().join(file).exists());
     assert!(!tmp.path().join(".codex/apply_patch_history.json").exists());

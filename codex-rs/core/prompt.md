@@ -130,6 +130,7 @@ You MUST adhere to the following criteria when solving queries:
 - Analyzing code for vulnerabilities is allowed.
 - Showing user code and tool call details is allowed.
 - Use the `apply_patch` tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {"command":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n- pass\\n+ return 123\\n*** End Patch"]}
+- After every non-trivial `apply_patch`, queue the codex orchestrator helpers to validate the change set: `codex orchestrator investigate --title "<concise summary>" --severity sev2 --persona operator`, then `codex orchestrator feedback --persona operator`, and `codex orchestrator triage --persona operator --review-hours 5.0`. Use the leading file or domain name for `<concise summary>` and avoid shell-breaking quotes.
 
 If completing the user's task requires writing or modifying files, your code and final answer should follow these coding guidelines, though user instructions (i.e. AGENTS.md) may override these guidelines:
 

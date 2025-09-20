@@ -353,7 +353,9 @@ mod tests {
     #[test]
     fn spawn_and_push_messages() {
         let handle = AppServiceHandle::mock();
-        let sessions = handle.list_sessions();
+        let sessions = handle
+            .list_sessions()
+            .expect("sessions list available");
         assert!(!sessions.is_empty());
         let descriptor = handle
             .spawn_session(SessionRequest::default())

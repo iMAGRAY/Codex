@@ -42,6 +42,7 @@ use tracing::warn;
 use crate::ModelProviderInfo;
 use crate::apply_patch;
 use crate::apply_patch::ApplyPatchExec;
+use crate::apply_patch::ApplyPatchOrchestratorAdvice;
 use crate::apply_patch::CODEX_APPLY_PATCH_ARG1;
 use crate::apply_patch::InternalApplyPatchInvocation;
 use crate::apply_patch::convert_apply_patch_to_protocol;
@@ -846,6 +847,7 @@ impl Session {
             Some(ApplyPatchCommandContext {
                 user_explicitly_approved_this_action,
                 changes,
+                orchestrator_advice: _,
             }) => {
                 turn_diff_tracker.on_patch_begin(&changes);
 
@@ -1109,6 +1111,7 @@ pub(crate) struct ExecCommandContext {
 pub(crate) struct ApplyPatchCommandContext {
     pub(crate) user_explicitly_approved_this_action: bool,
     pub(crate) changes: HashMap<PathBuf, FileChange>,
+    pub(crate) orchestrator_advice: Option<ApplyPatchOrchestratorAdvice>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2783,6 +2786,7 @@ async fn handle_container_exec_with_params(
         Some(ApplyPatchExec {
             action: ApplyPatchAction { patch, cwd, .. },
             user_explicitly_approved_this_action,
+            orchestrator_advice: _,
         }) => {
             let path_to_codex = std::env::current_exe()
                 .ok()
@@ -2895,9 +2899,11 @@ async fn handle_container_exec_with_params(
             |ApplyPatchExec {
                  action,
                  user_explicitly_approved_this_action,
+                 orchestrator_advice,
              }| ApplyPatchCommandContext {
                 user_explicitly_approved_this_action,
                 changes: convert_apply_patch_to_protocol(&action),
+                orchestrator_advice,
             },
         ),
     };
@@ -2930,6 +2936,15 @@ async fn handle_container_exec_with_params(
             let ExecToolCallOutput { exit_code, .. } = &output;
 
             let is_success = *exit_code == 0;
+            if is_success {
+                if let Some(apply_ctx) = &exec_command_context.apply_patch {
+                    if let Some(advice) = &apply_ctx.orchestrator_advice {
+                        sess
+                            .notify_background_event(&sub_id, advice.background_followup.clone())
+                            .await;
+                    }
+                }
+            }
             let content = format_exec_output(&output);
             ResponseInputItem::FunctionCallOutput {
                 call_id: call_id.clone(),

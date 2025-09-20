@@ -30,6 +30,7 @@ result
 # cli tools
 CLAUDE.md
 .claude/
+.claude_project_cache.json
 
 # caches
 .cache/
@@ -82,3 +83,10 @@ CHANGELOG.ignore.md
 .direnv
 .envrc
 /embeddinggemma-300m
+.venv_doc/
+
+# local sandboxes
+.staging/
+.ucm/
+1/
+.codex-thoughts-initialized

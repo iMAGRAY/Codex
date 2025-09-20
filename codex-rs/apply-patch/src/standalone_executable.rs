@@ -10,8 +10,8 @@ use crate::cli::{
 use crate::history::{self, UndoError, UndoRecord};
 use crate::interactive::{self, InteractiveCapability, InteractiveError, InteractiveRequest};
 use crate::{
-    ApplyPatchAction, ApplyPatchError, MaybeApplyPatchVerified, apply_patch,
-    build_selected_patch, maybe_parse_apply_patch_verified,
+    ApplyPatchAction, ApplyPatchError, MaybeApplyPatchVerified, apply_patch, build_selected_patch,
+    maybe_parse_apply_patch_verified,
 };
 
 pub fn main() -> ! {
@@ -87,7 +87,7 @@ fn run_apply(invocation: CliInvocation, patch: String) -> Result<(), WorkflowErr
     let action = parse_action(&patch, &cwd)?;
 
     let should_interactive = determine_interactive(&invocation.config);
-    let mut selection = if should_interactive {
+    let selection = if should_interactive {
         let request = InteractiveRequest {
             config: &invocation.config,
             plan: &action,
@@ -101,11 +101,7 @@ fn run_apply(invocation: CliInvocation, patch: String) -> Result<(), WorkflowErr
         }
     };
 
-    if matches!(selection, ApplyAll) && invocation.config.assume_yes {
-        selection = ApplyAll;
-    }
-
-    let mut working_action = match &selection {
+    let working_action = match &selection {
         ApplyAll => action.clone(),
         SkipAll => {
             if invocation.config.summary_mode != SummaryMode::Quiet {
@@ -273,14 +269,14 @@ fn print_preview(action: &ApplyPatchAction, config: &CliConfig) -> Result<(), Wo
     }
     for (index, hunk) in action.hunks.iter().enumerate() {
         let abs_path = hunk.resolve_path(&action.cwd);
-        let display_path = display_path(&abs_path, &action.cwd);
+        let path_display = display_path(&abs_path, &action.cwd);
         let change = action.changes().get(&abs_path).ok_or_else(|| {
             WorkflowError::Message(format!(
                 "Missing change metadata for {}",
                 abs_path.display()
             ))
         })?;
-        println!("  [{}] {}", index, display_path);
+        println!("  [{}] {}", index, path_display);
         match change {
             crate::ApplyPatchFileChange::Add { content } => {
                 for line in content.lines() {

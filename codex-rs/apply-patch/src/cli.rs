@@ -28,6 +28,7 @@ impl Default for CliConfig {
 }
 
 impl CliConfig {
+    #[allow(dead_code)]
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -80,6 +81,7 @@ pub enum CliError {
     MissingPatch,
     #[error("`--run-after` requires a non-empty command value.")]
     MissingRunAfterValue,
+    #[allow(dead_code)]
     #[error("{0}")]
     Usage(String),
     #[error("{0}")]

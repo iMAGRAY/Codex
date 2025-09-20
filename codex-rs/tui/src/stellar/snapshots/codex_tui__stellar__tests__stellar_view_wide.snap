@@ -3,11 +3,11 @@ source: tui/src/stellar/tests.rs
 expression: terminal.backend()
 ---
 "┌ Insight Canvas ────────────────────────────────────────────────────────────────────────────────┐┌ Observability Overlay ─────────────────┐"
-"│Persona: operator                                                                               ││Latency p95     0ms  Audit fallback 0   │"
-"│                                                                                                ││Cache hit 100.0%                        │"
+"│Persona: operator                                                                               ││Latency   0ms  Cache 100%               │"
 "│                                                                                                ││[ Investigate ] Ctrl+R - guide the      │"
-"│<type an insight or use CLI bridge>                                                             ││operator runbook                        │"
-"│                                                                                                ││Ctrl+O to hide overlay                  │"
+"│                                                                                                ││operator runbook                        │"
+"│<type an insight or use CLI bridge>                                                             ││Ctrl+O to hide overlay                  │"
+"│                                                                                                ││                                        │"
 "│                                                                                                ││                                        │"
 "│⚠ 1 queued offline operation                                                                    ││                                        │"
 "│                                                                                                ││                                        │"

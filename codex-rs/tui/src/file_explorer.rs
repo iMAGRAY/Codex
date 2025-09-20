@@ -3,7 +3,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Stylize;
-use ratatui::widgets::WidgetRef;
+use ratatui::widgets::{Widget, WidgetRef};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs;
@@ -33,11 +33,7 @@ pub(crate) struct FileExplorerState {
 impl FileExplorerState {
     pub fn new(root_path: PathBuf) -> Self {
         let mut state = Self {
-            root: ExplorerNode::directory(
-                0,
-                root_path.clone(),
-                display_name_for_root(&root_path),
-            ),
+            root: ExplorerNode::directory(0, root_path.clone(), display_name_for_root(&root_path)),
             visible: Vec::new(),
             selected: 0,
             next_id: 1,
@@ -64,6 +60,7 @@ impl FileExplorerState {
         self.selected
     }
 
+    #[allow(dead_code)]
     pub fn select_index(&mut self, idx: usize) {
         if idx < self.visible.len() {
             self.selected = idx;
@@ -97,7 +94,7 @@ impl FileExplorerState {
 
     pub fn collapse_selected(&mut self) -> io::Result<()> {
         let id = match self.selected_entry() {
-            Some(entry) if entry.is_dir => entry.id,
+            Some(entry) if entry.is_dir => Some(entry.id),
             Some(entry) => self.parent_dir_id(entry.id),
             None => None,
         };
@@ -219,17 +216,24 @@ impl FileExplorerState {
 
     fn rebuild_visible(&mut self) -> io::Result<()> {
         self.visible.clear();
-        self.build_visible(&mut self.root, 0)?;
+        let mut visible_entries = Vec::new();
+        Self::build_visible_recursive(&mut self.root, &mut self.next_id, 0, &mut visible_entries)?;
+        self.visible = visible_entries;
         if self.selected >= self.visible.len() {
             self.selected = self.visible.len().saturating_sub(1);
         }
         Ok(())
     }
 
-    fn build_visible(&mut self, node: &mut ExplorerNode, depth: u16) -> io::Result<()> {
+    fn build_visible_recursive(
+        node: &mut ExplorerNode,
+        next_id: &mut usize,
+        depth: u16,
+        visible: &mut Vec<VisibleEntry>,
+    ) -> io::Result<()> {
         match &mut node.kind {
             ExplorerNodeKind::File => {
-                self.visible.push(VisibleEntry {
+                visible.push(VisibleEntry {
                     id: node.id,
                     depth,
                     name: node.name.clone(),
@@ -243,7 +247,7 @@ impl FileExplorerState {
                 let need_load = dir_state.expanded && !dir_state.children_loaded;
                 if need_load {
                     let path = node.path.clone();
-                    let (children, truncated) = self.read_dir_entries(&path)?;
+                    let (children, truncated) = Self::read_dir_entries_static(&path, next_id)?;
                     if let ExplorerNodeKind::Directory(dir) = &mut node.kind {
                         dir.children = children;
                         dir.children_loaded = true;
@@ -252,7 +256,7 @@ impl FileExplorerState {
                 }
 
                 if let ExplorerNodeKind::Directory(dir) = &mut node.kind {
-                    self.visible.push(VisibleEntry {
+                    visible.push(VisibleEntry {
                         id: node.id,
                         depth,
                         name: node.name.clone(),
@@ -264,10 +268,10 @@ impl FileExplorerState {
 
                     if dir.expanded {
                         for child in dir.children.iter_mut() {
-                            self.build_visible(child, depth + 1)?;
+                            Self::build_visible_recursive(child, next_id, depth + 1, visible)?;
                         }
                         if dir.truncated {
-                            self.visible.push(VisibleEntry {
+                            visible.push(VisibleEntry {
                                 id: node.id,
                                 depth: depth + 1,
                                 name: "…".to_string(),
@@ -282,6 +286,61 @@ impl FileExplorerState {
             }
         }
         Ok(())
+    }
+
+    fn read_dir_entries_static(
+        path: &Path,
+        next_id: &mut usize,
+    ) -> io::Result<(Vec<ExplorerNode>, bool)> {
+        let alloc_id = |next_id: &mut usize| -> usize {
+            let id = *next_id;
+            *next_id += 1;
+            id
+        };
+
+        let mut heap = BinaryHeap::new();
+        let mut truncated = false;
+
+        let entries = match fs::read_dir(path) {
+            Ok(entries) => entries,
+            Err(err) => {
+                tracing::warn!(error = %err, path = %path.display(), "file explorer read_dir failed");
+                return Ok((Vec::new(), false));
+            }
+        };
+
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            let name_os = entry.file_name();
+            let name = match name_os.into_string() {
+                Ok(name) => name,
+                Err(_) => continue,
+            };
+
+            let node = if file_type.is_dir() {
+                ExplorerNode::directory(alloc_id(next_id), entry_path, name)
+            } else {
+                ExplorerNode::file(alloc_id(next_id), entry_path, name)
+            };
+
+            heap.push(SortEntry::new(node));
+            if heap.len() > MAX_CHILDREN_PER_DIR {
+                heap.pop();
+                truncated = true;
+            }
+        }
+
+        let mut nodes: Vec<ExplorerNode> = heap
+            .into_sorted_vec()
+            .into_iter()
+            .map(|entry| entry.node)
+            .collect();
+        nodes.shrink_to_fit();
+        Ok((nodes, truncated))
     }
 
     fn read_dir_entries(&mut self, path: &Path) -> io::Result<(Vec<ExplorerNode>, bool)> {
@@ -321,17 +380,23 @@ impl FileExplorerState {
             }
         }
 
-        let mut nodes: Vec<ExplorerNode> = heap.into_sorted_vec().into_iter().map(|entry| entry.node).collect();
+        let mut nodes: Vec<ExplorerNode> = heap
+            .into_sorted_vec()
+            .into_iter()
+            .map(|entry| entry.node)
+            .collect();
         nodes.shrink_to_fit();
         Ok((nodes, truncated))
     }
 
     fn find_node(&self, node_id: usize) -> io::Result<&ExplorerNode> {
-        find_node(&self.root, node_id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "node not found"))
+        find_node(&self.root, node_id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "node not found"))
     }
 
     fn find_node_mut(&mut self, node_id: usize) -> io::Result<&mut ExplorerNode> {
-        find_node_mut(&mut self.root, node_id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "node not found"))
+        find_node_mut(&mut self.root, node_id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "node not found"))
     }
 
     fn alloc_id(&mut self) -> usize {
@@ -436,7 +501,9 @@ impl Eq for SortEntry {}
 
 impl PartialEq for SortEntry {
     fn eq(&self, other: &Self) -> bool {
-        self.sort_rank == other.sort_rank && self.lowercase == other.lowercase && self.node.name == other.node.name
+        self.sort_rank == other.sort_rank
+            && self.lowercase == other.lowercase
+            && self.node.name == other.node.name
     }
 }
 
@@ -483,7 +550,11 @@ fn find_node_mut<'a>(node: &'a mut ExplorerNode, node_id: usize) -> Option<&'a m
     }
 }
 
-fn find_parent_id(node: &mut ExplorerNode, target_id: usize, parent: Option<usize>) -> Option<usize> {
+fn find_parent_id(
+    node: &mut ExplorerNode,
+    target_id: usize,
+    parent: Option<usize>,
+) -> Option<usize> {
     if node.id == target_id {
         return parent;
     }
@@ -521,7 +592,15 @@ impl<'a> WidgetRef for FileExplorerWidget<'a> {
             Style::default().fg(Color::DarkGray).bold()
         };
         let header_text = format!("Files · {}", self.state.root_name());
-        render_line(buf, area.x, area.y, area.width, &header_text, header_style, header_style);
+        render_line(
+            buf,
+            area.x,
+            area.y,
+            area.width,
+            &header_text,
+            header_style,
+            header_style,
+        );
 
         let mut row_y = area.y.saturating_add(1);
         let rows_available = area.height.saturating_sub(1);
@@ -566,7 +645,9 @@ impl<'a> WidgetRef for FileExplorerWidget<'a> {
                 (Style::default(), Style::default())
             };
 
-            render_line(buf, area.x, row_y, area.width, &text, text_style, fill_style);
+            render_line(
+                buf, area.x, row_y, area.width, &text, text_style, fill_style,
+            );
             row_y = row_y.saturating_add(1);
             rows_rendered = rows_rendered.saturating_add(1);
         }
@@ -583,6 +664,12 @@ impl<'a> WidgetRef for FileExplorerWidget<'a> {
                 Style::default(),
             );
         }
+    }
+}
+
+impl<'a> Widget for FileExplorerWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.render_ref(area, buf);
     }
 }
 
@@ -609,7 +696,15 @@ fn render_entry_label(entry: &VisibleEntry) -> String {
     text
 }
 
-fn render_line(buf: &mut Buffer, x: u16, y: u16, width: u16, text: &str, text_style: Style, fill_style: Style) {
+fn render_line(
+    buf: &mut Buffer,
+    x: u16,
+    y: u16,
+    width: u16,
+    text: &str,
+    text_style: Style,
+    fill_style: Style,
+) {
     if width == 0 {
         return;
     }

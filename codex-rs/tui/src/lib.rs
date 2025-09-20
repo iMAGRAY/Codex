@@ -4,20 +4,20 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 #![deny(clippy::disallowed_methods)]
 use app::App;
-use codex_core::AuthManager;
-use codex_core::BUILT_IN_OSS_MODEL_PROVIDER_ID;
-use codex_core::CodexAuth;
-use codex_core::RolloutRecorder;
+use codex_core::config::find_codex_home;
+use codex_core::config::load_config_as_toml_with_cli_overrides;
+use codex_core::config::persist_model_selection;
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
 use codex_core::config::ConfigToml;
 use codex_core::config::GPT_5_CODEX_MEDIUM_MODEL;
-use codex_core::config::find_codex_home;
-use codex_core::config::load_config_as_toml_with_cli_overrides;
-use codex_core::config::persist_model_selection;
 use codex_core::find_conversation_path_by_id_str;
 use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
+use codex_core::AuthManager;
+use codex_core::CodexAuth;
+use codex_core::RolloutRecorder;
+use codex_core::BUILT_IN_OSS_MODEL_PROVIDER_ID;
 use codex_ollama::DEFAULT_OSS_MODEL;
 use codex_protocol::config_types::SandboxMode;
 use codex_protocol::mcp_protocol::AuthMode;
@@ -25,8 +25,8 @@ use std::fs::OpenOptions;
 use std::path::PathBuf;
 use tracing::error;
 use tracing_appender::non_blocking;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::EnvFilter;
 
 mod app;
 mod app_backtrack;
@@ -41,8 +41,8 @@ mod clipboard_paste;
 pub mod custom_terminal;
 mod diff_render;
 mod exec_command;
-mod file_search;
 mod file_explorer;
+mod file_search;
 mod frames;
 mod get_git_diff;
 mod history_cell;
@@ -56,6 +56,7 @@ pub mod mcp;
 mod new_model_popup;
 pub mod onboarding;
 mod pager_overlay;
+mod progressive_disclosure;
 mod render;
 mod resume_picker;
 mod session_log;
@@ -75,11 +76,11 @@ mod wrapping;
 #[cfg(not(debug_assertions))]
 mod updates;
 
-use crate::new_model_popup::ModelUpgradeDecision;
 use crate::new_model_popup::run_model_upgrade_popup;
-use crate::onboarding::TrustDirectorySelection;
-use crate::onboarding::onboarding_screen::OnboardingScreenArgs;
+use crate::new_model_popup::ModelUpgradeDecision;
 use crate::onboarding::onboarding_screen::run_onboarding_app;
+use crate::onboarding::onboarding_screen::OnboardingScreenArgs;
+use crate::onboarding::TrustDirectorySelection;
 use crate::tui::Tui;
 pub use cli::Cli;
 use codex_core::internal_storage::InternalStorage;
@@ -545,11 +546,11 @@ fn should_show_model_rollout_prompt(
 mod tests {
     use super::*;
     use clap::Parser;
-    use codex_core::auth::AuthAccount;
-    use codex_core::auth::AuthDotJson;
     use codex_core::auth::get_auth_file;
     use codex_core::auth::login_with_api_key;
     use codex_core::auth::write_auth_json;
+    use codex_core::auth::AuthAccount;
+    use codex_core::auth::AuthDotJson;
     use codex_core::token_data::IdTokenInfo;
     use codex_core::token_data::TokenData;
     fn make_config() -> Config {

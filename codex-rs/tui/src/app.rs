@@ -273,7 +273,7 @@ impl App {
                         }
 
                         if let Some(snapshot) = stellar_snapshot.as_ref() {
-                            let layout = ratatui::layout::Layout::vertical([
+                            let layout: [ratatui::layout::Rect; 2] = ratatui::layout::Layout::vertical([
                                 ratatui::layout::Constraint::Length(
                                     stellar_height.min(chat_container.height),
                                 ),
@@ -696,14 +696,13 @@ impl App {
             limited.read_to_end(&mut buffer)?;
         }
 
-        let mut truncated = false;
-        if buffer.len() > FILE_PREVIEW_LIMIT_BYTES {
+        let truncated = if buffer.len() > FILE_PREVIEW_LIMIT_BYTES {
             buffer.truncate(FILE_PREVIEW_LIMIT_BYTES);
-            truncated = true;
+            true
         } else {
             let mut probe = [0u8; 1];
-            truncated = file.read(&mut probe)? > 0;
-        }
+            file.read(&mut probe)? > 0
+        };
 
         if buffer.is_empty() {
             let mut lines = Vec::new();

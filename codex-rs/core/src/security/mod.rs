@@ -657,6 +657,26 @@ fn evidence_key(timestamp: DateTime<Utc>, id: &Uuid) -> [u8; 24] {
     key
 }
 
+fn is_lock_contention(err: &std::io::Error) -> bool {
+    use std::io::ErrorKind;
+
+    match err.kind() {
+        ErrorKind::WouldBlock => true,
+        _ => {
+            if err
+                .raw_os_error()
+                .is_some_and(|code| code == libc::EWOULDBLOCK || code == libc::EAGAIN)
+            {
+                true
+            } else {
+                let message = err.to_string();
+                message.contains("Resource temporarily unavailable")
+                    || message.contains("could not acquire lock")
+            }
+        }
+    }
+}
+
 fn audit_ledger() -> Result<&'static AuditLedger, LedgerError> {
     if let Some(ledger) = AUDIT_LEDGER.get() {
         return Ok(ledger);
@@ -665,7 +685,7 @@ fn audit_ledger() -> Result<&'static AuditLedger, LedgerError> {
     let ledger = match AuditLedger::open(config) {
         Ok(ledger) => ledger,
         Err(LedgerError::Store(sled::Error::Io(io_err)))
-            if io_err.kind() == std::io::ErrorKind::WouldBlock =>
+            if is_lock_contention(&io_err) =>
         {
             tracing::warn!("audit ledger locked at CODEX_HOME; using temporary in-memory store");
             AuditLedger::open(AuditLedgerConfig::temporary_for_process())?
@@ -694,7 +714,7 @@ pub fn append_audit_event(event: AuditEvent) -> Result<AuditRecord, LedgerError>
         Ok(record) => Ok(record),
         Err(err) => {
             if let LedgerError::Store(sled::Error::Io(io_err)) = &err {
-                if io_err.kind() == std::io::ErrorKind::WouldBlock {
+                if is_lock_contention(&io_err) {
                     tracing::warn!("audit ledger append blocked; routing entry to temporary store");
                     crate::telemetry::TelemetryHub::global().record_audit_fallback();
                     return audit_ledger_fallback()?.append(event);
