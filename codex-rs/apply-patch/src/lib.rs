@@ -3,6 +3,7 @@ mod seek_sequence;
 mod standalone_executable;
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -30,6 +31,7 @@ pub use standalone_executable::main;
 pub const APPLY_PATCH_TOOL_INSTRUCTIONS: &str = include_str!("../apply_patch_tool_instructions.md");
 
 const APPLY_PATCH_COMMANDS: [&str; 2] = ["apply_patch", "applypatch"];
+const BEGIN_PATCH_COMMANDS: [&str; 2] = ["begin_patch", "beginpatch"];
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ApplyPatchError {
@@ -167,6 +169,10 @@ pub struct ApplyPatchAction {
 
     /// The working directory that was used to resolve relative paths in the patch.
     pub cwd: PathBuf,
+
+    /// Optional explicit command to realize the patch. When `None`, the built-in
+    /// `apply_patch` entry point is used.
+    pub command: Option<Vec<String>>,
 }
 
 impl ApplyPatchAction {
@@ -207,6 +213,7 @@ impl ApplyPatchAction {
                 .expect("path should have parent")
                 .to_path_buf(),
             patch,
+            command: None,
         }
     }
 }
@@ -235,75 +242,24 @@ pub fn maybe_parse_apply_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
     }
 
     match maybe_parse_apply_patch(argv) {
-        MaybeApplyPatch::Body(ApplyPatchArgs {
-            patch,
-            hunks,
-            workdir,
-        }) => {
-            let effective_cwd = workdir
-                .as_ref()
-                .map(|dir| {
-                    let path = Path::new(dir);
-                    if path.is_absolute() {
-                        path.to_path_buf()
-                    } else {
-                        cwd.join(path)
-                    }
-                })
-                .unwrap_or_else(|| cwd.to_path_buf());
-            let mut changes = HashMap::new();
-            for hunk in hunks {
-                let path = hunk.resolve_path(&effective_cwd);
-                match hunk {
-                    Hunk::AddFile { contents, .. } => {
-                        changes.insert(path, ApplyPatchFileChange::Add { content: contents });
-                    }
-                    Hunk::DeleteFile { .. } => {
-                        let content = match std::fs::read_to_string(&path) {
-                            Ok(content) => content,
-                            Err(e) => {
-                                return MaybeApplyPatchVerified::CorrectnessError(
-                                    ApplyPatchError::IoError(IoError {
-                                        context: format!("Failed to read {}", path.display()),
-                                        source: e,
-                                    }),
-                                );
-                            }
-                        };
-                        changes.insert(path, ApplyPatchFileChange::Delete { content });
-                    }
-                    Hunk::UpdateFile {
-                        move_path, chunks, ..
-                    } => {
-                        let ApplyPatchFileUpdate {
-                            unified_diff,
-                            content: contents,
-                        } = match unified_diff_from_chunks(&path, &chunks) {
-                            Ok(diff) => diff,
-                            Err(e) => {
-                                return MaybeApplyPatchVerified::CorrectnessError(e);
-                            }
-                        };
-                        changes.insert(
-                            path,
-                            ApplyPatchFileChange::Update {
-                                unified_diff,
-                                move_path: move_path.map(|p| cwd.join(p)),
-                                new_content: contents,
-                            },
-                        );
-                    }
-                }
-            }
-            MaybeApplyPatchVerified::Body(ApplyPatchAction {
-                changes,
-                patch,
-                cwd: effective_cwd,
-            })
-        }
+        MaybeApplyPatch::Body(args) => match build_apply_patch_action(args, cwd, None) {
+            Ok(action) => MaybeApplyPatchVerified::Body(action),
+            Err(err) => MaybeApplyPatchVerified::CorrectnessError(err),
+        },
         MaybeApplyPatch::ShellParseError(e) => MaybeApplyPatchVerified::ShellParseError(e),
         MaybeApplyPatch::PatchParseError(e) => MaybeApplyPatchVerified::CorrectnessError(e.into()),
-        MaybeApplyPatch::NotApplyPatch => MaybeApplyPatchVerified::NotApplyPatch,
+        MaybeApplyPatch::NotApplyPatch => maybe_parse_begin_patch_verified(argv, cwd),
+    }
+}
+
+pub fn maybe_parse_begin_patch_verified(argv: &[String], cwd: &Path) -> MaybeApplyPatchVerified {
+    match maybe_extract_begin_patch_args(argv, cwd) {
+        Ok(Some((args, command))) => match build_apply_patch_action(args, cwd, Some(command)) {
+            Ok(action) => MaybeApplyPatchVerified::Body(action),
+            Err(err) => MaybeApplyPatchVerified::CorrectnessError(err),
+        },
+        Ok(None) => MaybeApplyPatchVerified::NotApplyPatch,
+        Err(err) => MaybeApplyPatchVerified::CorrectnessError(err),
     }
 }
 
@@ -457,6 +413,199 @@ fn extract_apply_patch_from_bash(
     }
 
     Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch)
+}
+
+fn maybe_extract_begin_patch_args(
+    argv: &[String],
+    cwd: &Path,
+) -> Result<Option<(ApplyPatchArgs, Vec<String>)>, ApplyPatchError> {
+    let Some(first) = argv.first() else {
+        return Ok(None);
+    };
+    let Some(cmd_name) = Path::new(first)
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+    else {
+        return Ok(None);
+    };
+    if !BEGIN_PATCH_COMMANDS.contains(&cmd_name.as_str()) {
+        return Ok(None);
+    }
+
+    let mut patch_file: Option<PathBuf> = None;
+    let mut root_override: Option<PathBuf> = None;
+    let mut apply_command = Vec::with_capacity(argv.len());
+    apply_command.push(first.clone());
+
+    let mut idx = 1;
+    while idx < argv.len() {
+        let arg = &argv[idx];
+        match arg.as_str() {
+            "-f" | "--patch-file" => {
+                idx += 1;
+                if idx >= argv.len() {
+                    return Err(ApplyPatchError::IoError(IoError {
+                        context: "begin_patch missing value for -f/--patch-file".to_string(),
+                        source: std::io::Error::other("missing value"),
+                    }));
+                }
+                let value = argv[idx].clone();
+                patch_file = Some(PathBuf::from(&value));
+                apply_command.push(arg.clone());
+                apply_command.push(value);
+            }
+            "-C" | "--root" => {
+                idx += 1;
+                if idx >= argv.len() {
+                    return Err(ApplyPatchError::IoError(IoError {
+                        context: "begin_patch missing value for -C/--root".to_string(),
+                        source: std::io::Error::other("missing value"),
+                    }));
+                }
+                let value = argv[idx].clone();
+                root_override = Some(PathBuf::from(&value));
+                apply_command.push(arg.clone());
+                apply_command.push(value);
+            }
+            "--" => {
+                apply_command.extend_from_slice(&argv[idx..]);
+                break;
+            }
+            other => {
+                if let Some(path) = other.strip_prefix("--patch-file=") {
+                    patch_file = Some(PathBuf::from(path));
+                    apply_command.push(format!("--patch-file={path}"));
+                } else if let Some(path) = other.strip_prefix("--root=") {
+                    root_override = Some(PathBuf::from(path));
+                    apply_command.push(format!("--root={path}"));
+                } else if other.starts_with("--output-format=") || other == "--output-format" {
+                    if other == "--output-format" {
+                        idx += 1;
+                    }
+                } else if other.starts_with("--stdout-schema=") || other == "--stdout-schema" {
+                    if other == "--stdout-schema" {
+                        idx += 1;
+                    }
+                } else if matches!(
+                    other,
+                    "--dry-run"
+                        | "--plan"
+                        | "--no-summary"
+                        | "--no-logs"
+                        | "--machine"
+                        | "--preset"
+                ) {
+                    if other == "--preset" {
+                        idx += 1;
+                    }
+                } else if other.starts_with("-f") && other.len() > 2 {
+                    patch_file = Some(PathBuf::from(&other[2..]));
+                    apply_command.push(format!("-f{}", &other[2..]));
+                } else if other.starts_with("-C") && other.len() > 2 {
+                    root_override = Some(PathBuf::from(&other[2..]));
+                    apply_command.push(format!("-C{}", &other[2..]));
+                } else {
+                    apply_command.push(argv[idx].clone());
+                }
+            }
+        }
+        idx += 1;
+    }
+
+    let Some(patch_path) = patch_file else {
+        return Ok(None);
+    };
+
+    let resolved_patch = if patch_path.is_absolute() {
+        patch_path
+    } else {
+        cwd.join(patch_path)
+    };
+
+    let patch_contents = fs::read_to_string(&resolved_patch).map_err(|e| {
+        ApplyPatchError::IoError(IoError {
+            context: format!("Failed to read patch file {}", resolved_patch.display()),
+            source: e,
+        })
+    })?;
+
+    let mut parsed = parse_patch(&patch_contents)?;
+    if let Some(root) = root_override {
+        let effective_root = if root.is_absolute() {
+            root
+        } else {
+            cwd.join(root)
+        };
+        parsed.workdir = Some(effective_root.to_string_lossy().into_owned());
+    }
+
+    Ok(Some((parsed, apply_command)))
+}
+
+fn build_apply_patch_action(
+    args: ApplyPatchArgs,
+    cwd: &Path,
+    command: Option<Vec<String>>,
+) -> Result<ApplyPatchAction, ApplyPatchError> {
+    let ApplyPatchArgs {
+        patch,
+        hunks,
+        workdir,
+    } = args;
+
+    let effective_cwd = workdir
+        .as_ref()
+        .map(|dir| {
+            let path = Path::new(dir);
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                cwd.join(path)
+            }
+        })
+        .unwrap_or_else(|| cwd.to_path_buf());
+
+    let mut changes = HashMap::new();
+    for hunk in hunks {
+        let path = hunk.resolve_path(&effective_cwd);
+        match hunk {
+            Hunk::AddFile { contents, .. } => {
+                changes.insert(path, ApplyPatchFileChange::Add { content: contents });
+            }
+            Hunk::DeleteFile { .. } => {
+                let content = fs::read_to_string(&path).map_err(|e| {
+                    ApplyPatchError::IoError(IoError {
+                        context: format!("Failed to read {}", path.display()),
+                        source: e,
+                    })
+                })?;
+                changes.insert(path, ApplyPatchFileChange::Delete { content });
+            }
+            Hunk::UpdateFile {
+                move_path, chunks, ..
+            } => {
+                let ApplyPatchFileUpdate {
+                    unified_diff,
+                    content: contents,
+                } = unified_diff_from_chunks(&path, &chunks)?;
+                changes.insert(
+                    path,
+                    ApplyPatchFileChange::Update {
+                        unified_diff,
+                        move_path: move_path.map(|p| cwd.join(p)),
+                        new_content: contents,
+                    },
+                );
+            }
+        }
+    }
+
+    Ok(ApplyPatchAction {
+        changes,
+        patch,
+        cwd: effective_cwd,
+        command,
+    })
 }
 
 #[derive(Debug, PartialEq)]
