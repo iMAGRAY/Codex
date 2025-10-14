@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::client_common::tools::ResponsesApiTool;
 use crate::openai_tools::JsonSchema;
-use crate::openai_tools::ResponsesApiTool;
 
 pub const EXEC_COMMAND_TOOL_NAME: &str = "exec_command";
 pub const WRITE_STDIN_TOOL_NAME: &str = "write_stdin";
@@ -95,7 +95,7 @@ pub fn create_exec_command_tool_for_responses_api() -> ResponsesApiTool {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["cmd".to_string()]),
-            additional_properties: Some(false),
+            additional_properties: Some(false.into()),
         },
     }
 }
@@ -221,7 +221,7 @@ pub fn create_write_stdin_tool_for_responses_api() -> ResponsesApiTool {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["session_id".to_string(), "chars".to_string()]),
-            additional_properties: Some(false),
+            additional_properties: Some(false.into()),
         },
     }
 }
@@ -309,7 +309,7 @@ pub fn create_exec_control_tool_for_responses_api() -> ResponsesApiTool {
         JsonSchema::Object {
             properties: action_properties,
             required: Some(vec!["type".to_string()]),
-            additional_properties: Some(false),
+            additional_properties: Some(false.into()),
         },
     );
 
@@ -322,7 +322,7 @@ pub fn create_exec_control_tool_for_responses_api() -> ResponsesApiTool {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["session_id".to_string(), "action".to_string()]),
-            additional_properties: Some(false),
+            additional_properties: Some(false.into()),
         },
     }
 }
@@ -360,7 +360,7 @@ IMPORTANT: Repeated polling is EXPENSIVE (~100-500 tokens per call). For monitor
                 ),
             ]),
             required: Some(Vec::new()),
-            additional_properties: Some(false),
+            additional_properties: Some(false.into()),
         },
     }
 }
@@ -397,7 +397,7 @@ pub fn create_get_session_events_tool_for_responses_api() -> ResponsesApiTool {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["session_id".to_string()]),
-            additional_properties: Some(false),
+            additional_properties: Some(false.into()),
         },
     }
 }
