@@ -63,8 +63,12 @@ use crate::exec_command::EXEC_COMMAND_TOOL_NAME;
 use crate::exec_command::EXEC_CONTROL_TOOL_NAME;
 use crate::exec_command::ExecCommandParams;
 use crate::exec_command::ExecControlParams;
+use crate::exec_command::ExecFlowRegistry;
 use crate::exec_command::ExecSessionManager;
+use crate::exec_command::GET_SESSION_EVENTS_TOOL_NAME;
 use crate::exec_command::LIST_EXEC_SESSIONS_TOOL_NAME;
+use crate::exec_command::SessionEventsParams;
+use crate::exec_command::SessionLifecycle;
 use crate::exec_command::WRITE_STDIN_TOOL_NAME;
 use crate::exec_command::WriteStdinParams;
 use crate::exec_env::create_env;
@@ -148,6 +152,7 @@ pub struct Codex {
     next_id: AtomicU64,
     tx_sub: Sender<Submission>,
     rx_event: Receiver<Event>,
+    exec_flow: Arc<ExecFlowRegistry>,
 }
 
 /// Wrapper returned by [`Codex::spawn`] containing the spawned [`Codex`],
@@ -169,11 +174,16 @@ pub(crate) const MODEL_FORMAT_TAIL_LINES: usize = MODEL_FORMAT_MAX_LINES - MODEL
 pub(crate) const MODEL_FORMAT_HEAD_BYTES: usize = MODEL_FORMAT_MAX_BYTES / 2;
 
 impl Codex {
+    pub fn exec_flow_registry(&self) -> Arc<ExecFlowRegistry> {
+        Arc::clone(&self.exec_flow)
+    }
+
     /// Spawn a new [`Codex`] and initialize the session.
     pub async fn spawn(
         config: Config,
         auth_manager: Arc<AuthManager>,
         conversation_history: InitialHistory,
+        exec_flow: Arc<ExecFlowRegistry>,
     ) -> CodexResult<CodexSpawnOk> {
         let (tx_sub, rx_sub) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
         let (tx_event, rx_event) = async_channel::unbounded();
@@ -200,6 +210,7 @@ impl Codex {
             configure_session,
             config.clone(),
             auth_manager.clone(),
+            Arc::clone(&exec_flow),
             tx_event.clone(),
             conversation_history,
         )
@@ -216,6 +227,7 @@ impl Codex {
             next_id: AtomicU64::new(0),
             tx_sub,
             rx_event,
+            exec_flow,
         };
 
         Ok(CodexSpawnOk {
@@ -334,6 +346,7 @@ impl Session {
         configure_session: ConfigureSession,
         config: Arc<Config>,
         auth_manager: Arc<AuthManager>,
+        exec_flow: Arc<ExecFlowRegistry>,
         tx_event: Sender<Event>,
         initial_history: InitialHistory,
     ) -> anyhow::Result<(Arc<Self>, TurnContext)> {
@@ -480,7 +493,7 @@ impl Session {
         };
         let services = SessionServices {
             mcp_connection_manager,
-            session_manager: ExecSessionManager::default(),
+            exec_flow_registry: Arc::clone(&exec_flow),
             unified_exec_manager: UnifiedExecSessionManager::default(),
             notifier: notify,
             rollout: Mutex::new(Some(rollout_recorder)),
@@ -501,6 +514,74 @@ impl Session {
             services,
             next_internal_sub_id: AtomicU64::new(0),
         });
+
+        // Bridge ExecFlow session updates to client-facing background events so UIs
+        // surface long-running exec status without relying on model-side polling.
+        {
+            let sess_clone = Arc::clone(&sess);
+            let mut rx = exec_flow.subscribe_updates();
+            tokio::spawn(async move {
+                use crate::protocol::BackgroundEventEvent;
+                use crate::protocol::Event;
+                use crate::protocol::EventMsg;
+                use crate::protocol::ExecSessionLifecycle as ProtoLifecycle;
+                use crate::protocol::ExecSessionUpdateKind as ProtoKind;
+
+                while let Ok(update) = rx.recv().await {
+                    let d = update.descriptor;
+                    let kind = match update.kind {
+                        crate::exec_command::ExecSessionEventKind::Started => "started",
+                        crate::exec_command::ExecSessionEventKind::Updated => "updated",
+                        crate::exec_command::ExecSessionEventKind::Terminated => "terminated",
+                    };
+                    let state = match d.state {
+                        crate::exec_command::SessionLifecycle::Running => "running",
+                        crate::exec_command::SessionLifecycle::Grace => "grace",
+                        crate::exec_command::SessionLifecycle::Terminated => "terminated",
+                    };
+
+                    let idle_left = d
+                        .idle_remaining
+                        .map(|dur| format!(" idle_left={}ms", dur.as_millis()))
+                        .unwrap_or_default();
+                    let log_path = d
+                        .log_path
+                        .as_ref()
+                        .map(|p| format!(" log={}", p.display()))
+                        .unwrap_or_default();
+                    let last = if d.recent_output.is_empty() {
+                        String::new()
+                    } else {
+                        let tail = d.recent_output.join("\n");
+                        format!("\n— recent —\n{}", tail)
+                    };
+                    let note = d
+                        .note
+                        .as_ref()
+                        .map(|n| format!(" note={}", n))
+                        .unwrap_or_default();
+
+                    let message = format!(
+                        "exec session #{:02} {} | state={} uptime={}ms bytes={}{}{}{}{}",
+                        d.session_id.0,
+                        kind,
+                        state,
+                        d.uptime.as_millis(),
+                        d.total_output_bytes,
+                        idle_left,
+                        log_path,
+                        note,
+                        last
+                    );
+
+                    let event = Event {
+                        id: INITIAL_SUBMIT_ID.to_owned(),
+                        msg: EventMsg::BackgroundEvent(BackgroundEventEvent { message }),
+                    };
+                    sess_clone.send_event(event).await;
+                }
+            });
+        }
 
         // Dispatch the SessionConfiguredEvent first and then report any errors.
         // If resuming, include converted initial messages in the payload so UIs can render them immediately.
@@ -533,6 +614,10 @@ impl Session {
             .next_internal_sub_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         format!("auto-compact-{id}")
+    }
+
+    fn exec_flow_manager(&self) -> ExecSessionManager {
+        self.services.exec_flow_manager()
     }
 
     async fn record_initial_history(
@@ -2516,8 +2601,7 @@ async fn handle_function_call(
                 ))
             })?;
             let result = sess
-                .services
-                .session_manager
+                .exec_flow_manager()
                 .handle_exec_command_request(exec_params)
                 .await;
             match result {
@@ -2532,15 +2616,17 @@ async fn handle_function_call(
                         "failed to parse function arguments: {e:?}"
                     ))
                 })?;
-
+            let compact = write_stdin_params.compact;
             let result = sess
-                .services
-                .session_manager
+                .exec_flow_manager()
                 .handle_write_stdin_request(write_stdin_params)
                 .await
                 .map_err(FunctionCallError::RespondToModel)?;
-
-            Ok(result.to_text_output())
+            Ok(if compact {
+                result.to_compact_output()
+            } else {
+                result.to_text_output()
+            })
         }
         EXEC_CONTROL_TOOL_NAME => {
             let control_params: ExecControlParams =
@@ -2550,51 +2636,66 @@ async fn handle_function_call(
                     ))
                 })?;
             let response = sess
-                .services
-                .session_manager
+                .exec_flow_manager()
                 .handle_exec_control_request(control_params)
                 .await;
-            let mut lines = vec![format!(
-                "session {}: {}",
-                response.session_id.0, response.status
-            )];
-            if let Some(note) = response.note
-                && !note.is_empty()
-            {
-                lines.push(format!("note: {note}"));
-            }
-            Ok(lines.join("\n"))
+            #[allow(clippy::expect_used)]
+            Ok(serde_json::to_string(&response).expect("serialize ExecControlResponse"))
         }
         LIST_EXEC_SESSIONS_TOOL_NAME => {
-            let summaries = sess.services.session_manager.list_sessions().await;
-            if summaries.is_empty() {
-                Ok("no exec sessions tracked".to_string())
-            } else {
-                let mut lines = Vec::with_capacity(summaries.len());
-                for summary in summaries {
-                    let uptime_secs = summary.uptime_ms as f64 / 1000.0;
-                    let idle_str = summary
-                        .idle_remaining_ms
-                        .map(|ms| format!("{:.1}s", ms as f64 / 1000.0))
-                        .unwrap_or_else(|| "-".to_string());
-                    let log_str = summary
-                        .log_path
-                        .as_ref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_else(|| "-".to_string());
-                    lines.push(format!(
-                        "#{:02} {state} uptime={uptime:.1}s idle_left={idle} bytes={} log={} cmd={}",
-                        summary.session_id.0,
-                        summary.total_output_bytes,
-                        log_str,
-                        summary.command_preview,
-                        state = summary.state,
-                        uptime = uptime_secs,
-                        idle = idle_str
-                    ));
-                }
-                Ok(lines.join("\n"))
+            #[derive(Debug, Default, Deserialize)]
+            struct ListSessionsArgs {
+                #[serde(default)]
+                state: Option<String>,
+                #[serde(default)]
+                limit: Option<usize>,
+                #[serde(default)]
+                since_ms: Option<u64>,
             }
+
+            let args: ListSessionsArgs = if arguments.trim().is_empty() {
+                ListSessionsArgs::default()
+            } else {
+                serde_json::from_str(&arguments).map_err(|e| {
+                    FunctionCallError::RespondToModel(format!(
+                        "failed to parse function arguments: {e:?}"
+                    ))
+                })?
+            };
+
+            let state_filter = args
+                .state
+                .as_deref()
+                .map(|state| match state {
+                    "running" => Ok(SessionLifecycle::Running),
+                    "grace" => Ok(SessionLifecycle::Grace),
+                    "terminated" => Ok(SessionLifecycle::Terminated),
+                    other => Err(FunctionCallError::RespondToModel(format!(
+                        "invalid state filter: {other}"
+                    ))),
+                })
+                .transpose()?;
+
+            let summaries = sess
+                .exec_flow_manager()
+                .list_sessions_filtered(state_filter, args.limit, args.since_ms)
+                .await;
+            #[allow(clippy::expect_used)]
+            Ok(serde_json::to_string(&summaries).expect("serialize exec session summaries"))
+        }
+        GET_SESSION_EVENTS_TOOL_NAME => {
+            let params: SessionEventsParams = serde_json::from_str(&arguments).map_err(|e| {
+                FunctionCallError::RespondToModel(format!(
+                    "failed to parse function arguments: {e:?}"
+                ))
+            })?;
+            let events = sess
+                .exec_flow_manager()
+                .session_events(params.session_id(), params.since_id(), params.limit())
+                .await
+                .map_err(FunctionCallError::RespondToModel)?;
+            #[allow(clippy::expect_used)]
+            Ok(serde_json::to_string(&events).expect("serialize session events"))
         }
         _ => Err(FunctionCallError::RespondToModel(format!(
             "unsupported call: {name}"
@@ -3353,9 +3454,10 @@ mod tests {
             is_review_mode: false,
             final_output_json_schema: None,
         };
+        let exec_flow = Arc::new(ExecFlowRegistry::new());
         let services = SessionServices {
             mcp_connection_manager: McpConnectionManager::default(),
-            session_manager: ExecSessionManager::default(),
+            exec_flow_registry: Arc::clone(&exec_flow),
             unified_exec_manager: UnifiedExecSessionManager::default(),
             notifier: UserNotifier::default(),
             rollout: Mutex::new(None),
@@ -3426,9 +3528,10 @@ mod tests {
             is_review_mode: false,
             final_output_json_schema: None,
         });
+        let exec_flow = Arc::new(ExecFlowRegistry::new());
         let services = SessionServices {
             mcp_connection_manager: McpConnectionManager::default(),
-            session_manager: ExecSessionManager::default(),
+            exec_flow_registry: Arc::clone(&exec_flow),
             unified_exec_manager: UnifiedExecSessionManager::default(),
             notifier: UserNotifier::default(),
             rollout: Mutex::new(None),

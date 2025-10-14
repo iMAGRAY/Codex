@@ -8,9 +8,6 @@ use tokio::task::JoinHandle;
 pub(crate) struct ExecCommandSession {
     /// Queue for writing bytes to the process stdin (PTY master write side).
     writer_tx: mpsc::Sender<Vec<u8>>,
-    /// Broadcast stream of output chunks read from the PTY. New subscribers
-    /// receive only chunks emitted after they subscribe.
-    output_tx: broadcast::Sender<Vec<u8>>,
 
     /// Child killer handle for termination on drop (can signal independently
     /// of a thread blocked in `.wait()`).
@@ -43,7 +40,6 @@ impl ExecCommandSession {
         (
             Self {
                 writer_tx,
-                output_tx,
                 killer: StdMutex::new(Some(killer)),
                 reader_handle: StdMutex::new(Some(reader_handle)),
                 writer_handle: StdMutex::new(Some(writer_handle)),
@@ -56,10 +52,6 @@ impl ExecCommandSession {
 
     pub(crate) fn writer_sender(&self) -> mpsc::Sender<Vec<u8>> {
         self.writer_tx.clone()
-    }
-
-    pub(crate) fn output_receiver(&self) -> broadcast::Receiver<Vec<u8>> {
-        self.output_tx.subscribe()
     }
 
     pub(crate) fn has_exited(&self) -> bool {

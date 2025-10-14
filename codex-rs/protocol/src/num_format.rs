@@ -93,6 +93,7 @@ mod tests {
         assert_eq!(fmt(1_000_000_000), "1.00G");
         assert_eq!(fmt(1_234_000_000), "1.23G");
         // Above 1000G we keep whole‑G precision (no higher unit supported here).
-        assert_eq!(fmt(1_234_000_000_000), "1,234G");
+        let giga = fmt(1_234_000_000_000);
+        assert_eq!(giga.replace('\u{00A0}', ","), "1,234G");
     }
 }

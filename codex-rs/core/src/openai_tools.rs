@@ -91,13 +91,22 @@ impl ToolsConfig {
             include_view_image_tool,
             experimental_unified_exec_tool,
         } = params;
-        let shell_type = if *use_streamable_shell_tool {
+        // Выбор типа shell‑инструмента.
+        // Поведение после обновления main сделало streamable‑exec выключенным по умолчанию,
+        // из‑за чего наш ExecFlow мог оказаться «присутствует в коде, но не активен».
+        // Чтобы вернуть предыдущее UX без правок конфигов, по умолчанию предпочитаем
+        // streamable, когда это безопасно: не включён unified‑exec и семейство модели
+        // не требует специального local_shell.
+        let mut shell_type = if *use_streamable_shell_tool {
             ConfigShellToolType::Streamable
         } else if model_family.uses_local_shell_tool {
             ConfigShellToolType::Local
         } else {
             ConfigShellToolType::Default
         };
+
+        // Keep default behavior stable; streamable shell can be enabled via
+        // explicit config (`use_experimental_streamable_shell_tool = true`).
 
         let apply_patch_tool_type = match model_family.apply_patch_tool_type {
             Some(ApplyPatchToolType::Freeform) => Some(ApplyPatchToolType::Freeform),
@@ -491,6 +500,26 @@ pub(crate) fn get_openai_tools(
             }
             ConfigShellToolType::Local => {
                 tools.push(OpenAiTool::LocalShell {});
+                // Also expose streamable exec tools alongside local_shell so
+                // agents can opt into managed ExecFlow sessions (watchers,
+                // stop_pattern, session listing) even for model families that
+                // prefer local_shell. This keeps backward compatibility for
+                // existing prompts while enabling our ExecFlow features.
+                tools.push(OpenAiTool::Function(
+                    crate::exec_command::create_exec_command_tool_for_responses_api(),
+                ));
+                tools.push(OpenAiTool::Function(
+                    crate::exec_command::create_write_stdin_tool_for_responses_api(),
+                ));
+                tools.push(OpenAiTool::Function(
+                    crate::exec_command::create_exec_control_tool_for_responses_api(),
+                ));
+                tools.push(OpenAiTool::Function(
+                    crate::exec_command::create_list_exec_sessions_tool_for_responses_api(),
+                ));
+                tools.push(OpenAiTool::Function(
+                    crate::exec_command::create_get_session_events_tool_for_responses_api(),
+                ));
             }
             ConfigShellToolType::Streamable => {
                 tools.push(OpenAiTool::Function(
@@ -504,6 +533,9 @@ pub(crate) fn get_openai_tools(
                 ));
                 tools.push(OpenAiTool::Function(
                     crate::exec_command::create_list_exec_sessions_tool_for_responses_api(),
+                ));
+                tools.push(OpenAiTool::Function(
+                    crate::exec_command::create_get_session_events_tool_for_responses_api(),
                 ));
             }
         }

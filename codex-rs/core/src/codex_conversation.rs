@@ -1,8 +1,10 @@
 use crate::codex::Codex;
 use crate::error::Result as CodexResult;
+use crate::exec_command::ExecFlowRegistry;
 use crate::protocol::Event;
 use crate::protocol::Op;
 use crate::protocol::Submission;
+use std::sync::Arc;
 
 pub struct CodexConversation {
     codex: Codex,
@@ -26,5 +28,9 @@ impl CodexConversation {
 
     pub async fn next_event(&self) -> CodexResult<Event> {
         self.codex.next_event().await
+    }
+
+    pub fn exec_flow_registry(&self) -> Arc<ExecFlowRegistry> {
+        self.codex.exec_flow_registry()
     }
 }

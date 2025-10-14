@@ -9,6 +9,7 @@ use crate::codex_conversation::CodexConversation;
 use crate::config::Config;
 use crate::error::CodexErr;
 use crate::error::Result as CodexResult;
+use crate::exec_command::ExecFlowRegistry;
 use crate::protocol::Event;
 use crate::protocol::EventMsg;
 use crate::protocol::SessionConfiguredEvent;
@@ -35,6 +36,7 @@ pub struct NewConversation {
 pub struct ConversationManager {
     conversations: Arc<RwLock<HashMap<ConversationId, Arc<CodexConversation>>>>,
     auth_manager: Arc<AuthManager>,
+    exec_flow: Arc<ExecFlowRegistry>,
 }
 
 impl ConversationManager {
@@ -42,6 +44,7 @@ impl ConversationManager {
         Self {
             conversations: Arc::new(RwLock::new(HashMap::new())),
             auth_manager,
+            exec_flow: Arc::new(ExecFlowRegistry::new()),
         }
     }
 
@@ -56,6 +59,10 @@ impl ConversationManager {
             .await
     }
 
+    pub fn exec_flow_registry(&self) -> Arc<ExecFlowRegistry> {
+        Arc::clone(&self.exec_flow)
+    }
+
     async fn spawn_conversation(
         &self,
         config: Config,
@@ -64,7 +71,13 @@ impl ConversationManager {
         let CodexSpawnOk {
             codex,
             conversation_id,
-        } = Codex::spawn(config, auth_manager, InitialHistory::New).await?;
+        } = Codex::spawn(
+            config,
+            auth_manager,
+            InitialHistory::New,
+            Arc::clone(&self.exec_flow),
+        )
+        .await?;
         self.finalize_spawn(codex, conversation_id).await
     }
 
@@ -121,7 +134,13 @@ impl ConversationManager {
         let CodexSpawnOk {
             codex,
             conversation_id,
-        } = Codex::spawn(config, auth_manager, initial_history).await?;
+        } = Codex::spawn(
+            config,
+            auth_manager,
+            initial_history,
+            Arc::clone(&self.exec_flow),
+        )
+        .await?;
         self.finalize_spawn(codex, conversation_id).await
     }
 
@@ -155,7 +174,7 @@ impl ConversationManager {
         let CodexSpawnOk {
             codex,
             conversation_id,
-        } = Codex::spawn(config, auth_manager, history).await?;
+        } = Codex::spawn(config, auth_manager, history, Arc::clone(&self.exec_flow)).await?;
 
         self.finalize_spawn(codex, conversation_id).await
     }

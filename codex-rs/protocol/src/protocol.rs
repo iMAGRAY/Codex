@@ -601,6 +601,154 @@ pub struct RateLimitSnapshot {
     pub secondary: Option<RateLimitWindow>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub enum ExecSessionUpdateKind {
+    #[serde(rename = "started")]
+    Started,
+    #[serde(rename = "updated")]
+    Updated,
+    #[serde(rename = "terminated")]
+    Terminated,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub enum ExecSessionLifecycle {
+    #[serde(rename = "running")]
+    Running,
+    #[serde(rename = "grace")]
+    Grace,
+    #[serde(rename = "terminated")]
+    Terminated,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+pub struct ExecSessionUpdateEvent {
+    pub session_id: u32,
+    pub kind: ExecSessionUpdateKind,
+    pub state: ExecSessionLifecycle,
+    pub command_preview: String,
+    pub uptime_ms: u64,
+    pub idle_remaining_ms: Option<u64>,
+    pub total_output_bytes: u64,
+    pub log_path: Option<String>,
+    pub recent_output: Vec<String>,
+    pub note: Option<String>,
+    pub lossy: bool,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub enum ExecCommandStatus {
+    /// Command started and runs in background. Tool call completed successfully.
+    #[serde(rename = "started")]
+    Running,
+    /// Command finished execution (either success or failure).
+    #[serde(rename = "completed")]
+    Completed,
+}
+
+pub const EXEC_COMMAND_PAYLOAD_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub struct ExecCommandPayload {
+    pub version: u32,
+    pub status: ExecCommandStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    pub wall_time_ms: u64,
+    pub output: String,
+    pub truncated: bool,
+    pub total_output_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_token_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub management_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guidance: Option<String>,
+    /// Number of lines in this response chunk
+    pub lines_count: usize,
+    /// Bytes in this response chunk (before truncation)
+    pub chunk_bytes: u64,
+    /// Whether stop_pattern was matched (auto-terminated)
+    pub pattern_matched: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern_metadata: Option<ExecPatternMatchPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tail_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions_summary: Option<Vec<String>>,
+    /// Whether this is incremental read (cursor advanced)
+    pub incremental: bool,
+    /// Start line number (0-indexed)
+    pub from_line: u64,
+    /// End line number (exclusive)
+    pub to_line: u64,
+    /// Total lines written to session (including evicted)
+    pub total_lines: u64,
+    /// Whether output was compressed
+    pub compressed: bool,
+    /// Original line count before compression
+    pub original_line_count: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub struct ExecPatternMatchPayload {
+    pub pattern: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_line_no: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub struct ExecControlRequest {
+    pub session_id: u32,
+    pub action: ExecControlActionPayload,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
+pub enum ExecControlActionPayload {
+    Keepalive {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        extend_timeout_ms: Option<u64>,
+    },
+    SendCtrlC,
+    Terminate,
+    ForceKill,
+    SetIdleTimeout {
+        timeout_ms: u64,
+    },
+    Watch {
+        pattern: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        watch_action: Option<String>,
+        #[serde(default)]
+        persist: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cooldown_ms: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auto_send_ctrl_c: Option<bool>,
+    },
+    Unwatch {
+        pattern: String,
+    },
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 pub struct RateLimitWindow {
     /// Percentage (0-100) of the window that has been consumed.
