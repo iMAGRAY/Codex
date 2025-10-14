@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Placeholder smoke-test; to be filled when begin_patch integration lands.
-# For now, ensure codex-cli builds.
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
-cargo build -p codex-cli
+pushd "$ROOT_DIR/codex-rs" >/dev/null
+cargo test -p codex-apply-patch maybe_parse_begin_patch
+popd >/dev/null

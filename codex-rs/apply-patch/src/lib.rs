@@ -1758,6 +1758,7 @@ g
                 )]),
                 patch: argv[1].clone(),
                 cwd: session_dir.path().to_path_buf(),
+                command: None,
             })
         );
     }
@@ -1778,7 +1779,75 @@ g
 
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-        let result = apply_patch(&patch, &mut stdout, &mut stderr);
-        assert!(result.is_err());
+    let result = apply_patch(&patch, &mut stdout, &mut stderr);
+    assert!(result.is_err());
+}
+
+    #[test]
+    fn maybe_parse_begin_patch_basic_command() {
+        let tmp = tempdir().expect("tmp");
+        let root = tmp.path();
+        let target = root.join("demo.txt");
+        fs::write(&target, "old\n").expect("write target");
+
+        let patch_path = root.join("patch.diff");
+        let patch_body = "*** Begin Patch\n*** Update File: demo.txt\n@@\n-old\n+new\n*** End Patch\n";
+        fs::write(&patch_path, patch_body).expect("write patch");
+
+        let argv = vec![
+            "begin_patch".to_string(),
+            "-f".to_string(),
+            patch_path.to_string_lossy().to_string(),
+        ];
+
+        match maybe_parse_apply_patch_verified(&argv, root) {
+            MaybeApplyPatchVerified::Body(action) => {
+                assert_eq!(action.cwd, root);
+                assert_eq!(action.patch.trim_end(), patch_body.trim_end());
+                let expected = vec![
+                    "begin_patch".to_string(),
+                    "-f".to_string(),
+                    patch_path.to_string_lossy().to_string(),
+                ];
+                assert_eq!(action.command, Some(expected));
+            }
+            other => panic!("expected Body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maybe_parse_begin_patch_sanitizes_dry_run_flags() {
+        let tmp = tempdir().expect("tmp");
+        let root = tmp.path();
+        let target = root.join("demo.txt");
+        fs::write(&target, "old\n").expect("write target");
+
+        let patch_path = root.join("patch.diff");
+        let patch_body = "*** Begin Patch\n*** Update File: demo.txt\n@@\n-old\n+new\n*** End Patch\n";
+        fs::write(&patch_path, patch_body).expect("write patch");
+
+        let argv = vec![
+            "begin_patch".to_string(),
+            "--dry-run".to_string(),
+            "--no-logs".to_string(),
+            "--output-format".to_string(),
+            "json".to_string(),
+            "--stdout-schema".to_string(),
+            "v2".to_string(),
+            "-f".to_string(),
+            patch_path.to_string_lossy().to_string(),
+        ];
+
+        match maybe_parse_apply_patch_verified(&argv, root) {
+            MaybeApplyPatchVerified::Body(action) => {
+                let expected = vec![
+                    "begin_patch".to_string(),
+                    "-f".to_string(),
+                    patch_path.to_string_lossy().to_string(),
+                ];
+                assert_eq!(action.command, Some(expected));
+            }
+            other => panic!("expected Body, got {other:?}"),
+        }
     }
 }
