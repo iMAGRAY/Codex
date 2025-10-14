@@ -1,0 +1,4 @@
+[submodule "modes/begin_patch"]
+	path = modes/begin_patch
+	url = https://github.com/iMAGRAY/begin_patch.git
+	branch = main
