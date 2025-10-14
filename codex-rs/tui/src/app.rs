@@ -73,7 +73,7 @@ pub(crate) struct App {
     // Pager overlay state (Transcript or Static like Diff)
     pub(crate) overlay: Option<Overlay>,
     pub(crate) deferred_history_lines: Vec<Line<'static>>,
-    has_emitted_history_lines: bool,
+    pub(crate) has_emitted_history_lines: bool,
 
     pub(crate) enhanced_keys_supported: bool,
 
