@@ -1,6 +1,6 @@
 SHELL := bash
 
-CODex_CARGO_BIN := codex-rs/target/release/codex-cli
+CARGO_BIN := codex
 CARGO_PROFILE := release
 CARGO_TARGET := codex-cli
 ARGS ?=
@@ -11,8 +11,4 @@ build:
 	cd codex-rs && cargo build --$(CARGO_PROFILE) -p $(CARGO_TARGET)
 
 start: build
-	@if [ -z "$$OPENAI_API_KEY" ]; then \
-		echo "OPENAI_API_KEY environment variable must be set" >&2; \
-		exit 2; \
-	fi
-	cd codex-rs && target/$(CARGO_PROFILE)/codex-cli $(ARGS)
+	cd codex-rs && target/$(CARGO_PROFILE)/$(CARGO_BIN) $(ARGS)
