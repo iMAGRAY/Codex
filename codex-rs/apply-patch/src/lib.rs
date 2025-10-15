@@ -1779,9 +1779,9 @@ g
 
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-    let result = apply_patch(&patch, &mut stdout, &mut stderr);
-    assert!(result.is_err());
-}
+        let result = apply_patch(&patch, &mut stdout, &mut stderr);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn maybe_parse_begin_patch_basic_command() {
@@ -1791,7 +1791,8 @@ g
         fs::write(&target, "old\n").expect("write target");
 
         let patch_path = root.join("patch.diff");
-        let patch_body = "*** Begin Patch\n*** Update File: demo.txt\n@@\n-old\n+new\n*** End Patch\n";
+        let patch_body =
+            "*** Begin Patch\n*** Update File: demo.txt\n@@\n-old\n+new\n*** End Patch\n";
         fs::write(&patch_path, patch_body).expect("write patch");
 
         let argv = vec![
@@ -1823,7 +1824,8 @@ g
         fs::write(&target, "old\n").expect("write target");
 
         let patch_path = root.join("patch.diff");
-        let patch_body = "*** Begin Patch\n*** Update File: demo.txt\n@@\n-old\n+new\n*** End Patch\n";
+        let patch_body =
+            "*** Begin Patch\n*** Update File: demo.txt\n@@\n-old\n+new\n*** End Patch\n";
         fs::write(&patch_path, patch_body).expect("write patch");
 
         let argv = vec![
