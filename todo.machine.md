@@ -127,6 +127,7 @@ Each task below lists **Inputs → Action → Outputs → Gate**; mark completio
 ## Phase 5 — Rebase Continuation & Finalization
 - **P5-01** `git status` → ensure all conflicts resolved; stage resolved files with provenance notes in commit message templates.
 - **P5-02** `git rebase --continue`; if new conflicts arise, loop back to Phase 1 for affected files.
+- [x] 2025-10-16: Rebase завершён; конфликтный коммит `fix(tui): restore app event flow` признан устаревшим относительно upstream и отменён через `git revert` после успешной интеграции MCP UX.
 - **P5-03** After rebase completes, run `git status -sb`, `git log --oneline -5` to confirm lineage.
 - **P5-04** Documentation artifacts: `notes/merge-summary.md` (decisions, tests, metrics), `reports/post-merge/<timestamp>/commands.log` (commands + durations).
 - **P5-05** Prepare PR summary referencing compliance with hard gates, risk register resolution, and outstanding TODOs (if any).

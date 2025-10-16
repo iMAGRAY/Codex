@@ -61,7 +61,7 @@
 - [ ] Review docs+RFC на предмет указания новых полей (ссылка в WS5) и обновить ссылки из core (doc-comment).
 - Acceptance: `cargo test -p codex-core --all-features`, `cargo test -p codex-core core::config::tests::mcp_*` локально + coverage ≥85% сохраняется.
 
-### WS2 — CLI MCP Wiring (Status: TEST RED)
+### WS2 — CLI MCP Wiring (Status: IN PROGRESS)
 **Цель:** Консолидация CLI зависимостей и команд под новую схему MCP.
 - [x] Разрешить конфликт `codex-rs/cli/Cargo.toml`:
   - Workspace версии `inquire`, `owo-colors`, `supports-color`, Seatbelt deps выровнены; `cargo metadata -q` проходит локально.
@@ -75,7 +75,7 @@
   - `cli/tests/mcp_wizard_json.rs`: `codex mcp wizard --json --template <id> --apply`, проверка summary `server` блока и миграций.
   - Гарантировать запуск в sandbox-дружественном режиме (`CODEX_SANDBOX_NETWORK_DISABLED=1`).
 - [ ] Обновить `CHANGES.md` и `docs/config.md` ссылками на новые CLI команды (см. WS5).
-- Acceptance: `cargo check -p codex-cli`, `cargo test -p codex-cli`, интеграционные тесты зелёные ≤200 мс p99.
+- Acceptance: `cargo check -p codex-cli`, `cargo test -p codex-cli`, интеграционные тесты зелёные ≤200 мс p99. (Текущее состояние: `cargo test -p codex-cli` пройдено 2025-10-16.)
 
 ### WS3 — Core MCP Modules & Registry (Status: ACTIVE)
 **Цель:** Поддержка `core/src/mcp/mod.rs`, `registry.rs`, `health.rs` с учётом новых transport/helpers.
