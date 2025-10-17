@@ -9,6 +9,7 @@ use codex_core::protocol::EventMsg;
 use codex_core::protocol::InputItem;
 use codex_core::protocol::Op;
 use codex_core::protocol::SandboxPolicy;
+use codex_core::protocol::UnifiedExecSessionStatus;
 use codex_protocol::config_types::ReasoningSummary;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -175,6 +176,78 @@ async fn unified_exec_reuses_session_via_stdin() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unified_exec_emits_session_snapshots() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+
+    let server = start_mock_server().await;
+
+    let mut builder = test_codex().with_config(|config| {
+        config.features.enable(Feature::UnifiedExec);
+    });
+    let TestCodex {
+        codex,
+        cwd,
+        session_configured,
+        ..
+    } = builder.build(&server).await?;
+
+    let call_id = "uexec-start";
+    let args = serde_json::json!({
+        "input": ["/bin/cat"],
+        "timeout_ms": 200,
+    });
+
+    let responses = vec![sse(vec![
+        ev_response_created("resp-1"),
+        ev_function_call(call_id, "unified_exec", &serde_json::to_string(&args)?),
+        ev_assistant_message("msg-1", "done"),
+        ev_completed("resp-1"),
+    ])];
+    mount_sse_sequence(&server, responses).await;
+
+    codex
+        .submit(Op::UserTurn {
+            items: vec![InputItem::Text {
+                text: "start unified exec".into(),
+            }],
+            final_output_json_schema: None,
+            cwd: cwd.path().to_path_buf(),
+            approval_policy: AskForApproval::Never,
+            sandbox_policy: SandboxPolicy::DangerFullAccess,
+            model: session_configured.model.clone(),
+            effort: None,
+            summary: ReasoningSummary::Auto,
+        })
+        .await?;
+
+    let snapshot_event = wait_for_event(&codex, |event| {
+        matches!(event, EventMsg::UnifiedExecSessions(_))
+    })
+    .await;
+
+    let EventMsg::UnifiedExecSessions(event) = snapshot_event else {
+        unreachable!("predicate ensured snapshot event");
+    };
+
+    assert_eq!(event.sessions.len(), 1, "expected single session snapshot");
+    let session = &event.sessions[0];
+    assert_eq!(
+        session.command,
+        vec!["/bin/cat"],
+        "command should be echoed"
+    );
+    assert_eq!(session.status, UnifiedExecSessionStatus::Running);
+    assert!(session.started_at_ms > 0, "expected start timestamp");
+    assert!(
+        session.last_output_at_ms.is_none(),
+        "no output expected yet"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_streams_after_lagged_output() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -182,7 +255,7 @@ async fn unified_exec_streams_after_lagged_output() -> Result<()> {
     let server = start_mock_server().await;
 
     let mut builder = test_codex().with_config(|config| {
-        config.use_experimental_unified_exec_tool = true;
+        config.use_unified_exec_tool = true;
         config.features.enable(Feature::UnifiedExec);
     });
     let TestCodex {

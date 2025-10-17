@@ -497,6 +497,9 @@ pub enum EventMsg {
     /// Notification that a patch application has finished.
     PatchApplyEnd(PatchApplyEndEvent),
 
+    /// Snapshot of unified exec sessions for the active conversation.
+    UnifiedExecSessions(UnifiedExecSessionsEvent),
+
     TurnDiff(TurnDiffEvent),
 
     /// Response to GetHistoryEntryRequest.
@@ -1229,6 +1232,32 @@ pub struct PatchApplyEndEvent {
     pub stderr: String,
     /// Whether the patch was applied successfully.
     pub success: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+pub struct UnifiedExecSessionsEvent {
+    pub sessions: Vec<UnifiedExecSessionState>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+pub struct UnifiedExecSessionState {
+    pub session_id: i32,
+    pub command: Vec<String>,
+    pub status: UnifiedExecSessionStatus,
+    #[ts(type = "number")]
+    pub started_at_ms: u64,
+    #[ts(type = "number | null")]
+    pub last_output_at_ms: Option<u64>,
+    pub output_preview: String,
+    #[serde(default)]
+    pub output_truncated: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UnifiedExecSessionStatus {
+    Running,
+    Exited,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]

@@ -12,13 +12,18 @@ use crate::mcp::McpManagerEntry;
 use crate::mcp::McpManagerState;
 use crate::mcp::McpWizardDraft;
 use crate::pager_overlay::Overlay;
+use crate::process_manager::ProcessManagerEntry;
+use crate::process_manager::entry_and_data_from_output;
 use crate::render::highlight::highlight_bash_to_lines;
 use crate::resume_picker::ResumeSelection;
 use crate::tui;
 use crate::tui::TuiEvent;
 use codex_ansi_escape::ansi_escape_line;
 use codex_core::AuthManager;
+use codex_core::CodexConversation;
 use codex_core::ConversationManager;
+use codex_core::UnifiedExecError;
+use codex_core::UnifiedExecOutputWindow;
 use codex_core::config::Config;
 use codex_core::config::persist_model_selection;
 use codex_core::config_types::McpServerConfig;
@@ -85,6 +90,9 @@ pub(crate) struct App {
 
     /// Set when the user confirms an update; propagated on exit.
     pub(crate) pending_update_action: Option<UpdateAction>,
+
+    /// Cached unified exec sessions for reuse when opening the manager.
+    latest_process_manager_entries: Vec<ProcessManagerEntry>,
 }
 
 impl App {
@@ -167,6 +175,7 @@ impl App {
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             backtrack: BacktrackState::default(),
             pending_update_action: None,
+            latest_process_manager_entries: Vec::new(),
         };
 
         let tui_events = tui.event_stream();
@@ -307,6 +316,53 @@ impl App {
             }
             AppEvent::OpenMcpManager => {
                 self.open_mcp_manager()?;
+            }
+            AppEvent::OpenProcessManager => {
+                self.open_process_manager().await?;
+            }
+            AppEvent::OpenUnifiedExecOutput { session_id } => {
+                self.open_unified_exec_output(session_id).await?;
+            }
+            AppEvent::OpenUnifiedExecInputPrompt { session_id } => {
+                self.chat_widget.open_unified_exec_input_prompt(session_id);
+            }
+            AppEvent::SendUnifiedExecInput { session_id, input } => {
+                self.send_unified_exec_input(session_id, input).await?;
+            }
+            AppEvent::KillUnifiedExecSession { session_id } => {
+                self.kill_unified_exec_session(session_id).await?;
+            }
+            AppEvent::RemoveUnifiedExecSession { session_id } => {
+                self.remove_unified_exec_session(session_id).await?;
+            }
+            AppEvent::RefreshUnifiedExecOutput { session_id } => {
+                self.refresh_unified_exec_output(session_id).await?;
+            }
+            AppEvent::LoadUnifiedExecOutputWindow { session_id, window } => {
+                self.load_unified_exec_output_window(session_id, window)
+                    .await?;
+            }
+            AppEvent::OpenUnifiedExecExportPrompt { session_id } => {
+                self.chat_widget.open_unified_exec_export_prompt(session_id);
+            }
+            AppEvent::ExportUnifiedExecLog {
+                session_id,
+                destination,
+            } => {
+                self.export_unified_exec_log(session_id, destination)
+                    .await?;
+            }
+            AppEvent::UpdateProcessManagerSessions { sessions } => {
+                self.latest_process_manager_entries = sessions
+                    .into_iter()
+                    .map(ProcessManagerEntry::from_state)
+                    .collect();
+                self.chat_widget
+                    .update_process_manager(self.latest_process_manager_entries.clone());
+            }
+            AppEvent::RefreshProcessOverview => {
+                self.chat_widget
+                    .refresh_process_overview(&self.latest_process_manager_entries);
             }
             AppEvent::OpenMcpWizard {
                 template_id,
@@ -497,6 +553,205 @@ impl App {
 
         self.chat_widget
             .show_mcp_wizard(catalog, Some(draft), existing_name);
+        Ok(())
+    }
+
+    async fn open_process_manager(&mut self) -> Result<()> {
+        if let Some(entries) = self.load_unified_exec_entries().await? {
+            self.latest_process_manager_entries = entries.clone();
+            self.chat_widget.show_process_manager(entries);
+        } else if !self.latest_process_manager_entries.is_empty() {
+            self.chat_widget
+                .show_process_manager(self.latest_process_manager_entries.clone());
+        }
+        Ok(())
+    }
+
+    async fn refresh_process_manager(&mut self) -> Result<()> {
+        self.open_process_manager().await
+    }
+
+    async fn load_unified_exec_entries(&mut self) -> Result<Option<Vec<ProcessManagerEntry>>> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(None),
+        };
+
+        let snapshots = conversation.unified_exec_sessions().await;
+        let entries = snapshots
+            .into_iter()
+            .map(ProcessManagerEntry::from_snapshot)
+            .collect();
+        Ok(Some(entries))
+    }
+
+    fn upsert_process_entry(&mut self, entry: ProcessManagerEntry) {
+        if let Some(existing) = self
+            .latest_process_manager_entries
+            .iter_mut()
+            .find(|existing| existing.session_id == entry.session_id)
+        {
+            *existing = entry;
+        } else {
+            self.latest_process_manager_entries.push(entry);
+        }
+    }
+
+    async fn open_unified_exec_output(&mut self, session_id: i32) -> Result<()> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(()),
+        };
+
+        let Some(output) = conversation.unified_exec_output(session_id).await else {
+            self.chat_widget
+                .add_info_message(format!("Session {session_id} is no longer tracked."), None);
+            return Ok(());
+        };
+
+        let (entry, data) = entry_and_data_from_output(output);
+        self.upsert_process_entry(entry.clone());
+        self.chat_widget
+            .update_process_manager(self.latest_process_manager_entries.clone());
+        self.chat_widget.update_unified_exec_output(entry, data);
+        Ok(())
+    }
+
+    async fn refresh_unified_exec_output(&mut self, session_id: i32) -> Result<()> {
+        self.open_unified_exec_output(session_id).await
+    }
+
+    async fn load_unified_exec_output_window(
+        &mut self,
+        session_id: i32,
+        window: UnifiedExecOutputWindow,
+    ) -> Result<()> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(()),
+        };
+
+        let Some(output) = conversation
+            .unified_exec_output_window(session_id, window)
+            .await
+        else {
+            self.chat_widget
+                .add_info_message(format!("Session {session_id} is no longer tracked."), None);
+            return Ok(());
+        };
+
+        let (entry, data) = entry_and_data_from_output(output);
+        self.upsert_process_entry(entry.clone());
+        self.chat_widget
+            .update_process_manager(self.latest_process_manager_entries.clone());
+        self.chat_widget.update_unified_exec_output(entry, data);
+        Ok(())
+    }
+
+    async fn export_unified_exec_log(
+        &mut self,
+        session_id: i32,
+        destination: PathBuf,
+    ) -> Result<()> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(()),
+        };
+
+        match conversation
+            .export_unified_exec_log(session_id, destination.clone())
+            .await
+        {
+            Ok(()) => self.chat_widget.add_info_message(
+                format!(
+                    "Exported session {session_id} log to {}",
+                    destination.display()
+                ),
+                None,
+            ),
+            Err(err) => self
+                .chat_widget
+                .add_error_message(format!("Failed to export session {session_id} log: {err}")),
+        }
+        Ok(())
+    }
+
+    async fn conversation_for_unified_exec(&mut self) -> Result<Option<Arc<CodexConversation>>> {
+        let Some(conversation_id) = self.chat_widget.conversation_id() else {
+            self.chat_widget.add_info_message(
+                "Unified exec sessions become available after the first turn.".to_string(),
+                None,
+            );
+            return Ok(None);
+        };
+
+        match self.server.get_conversation(conversation_id).await {
+            Ok(conv) => Ok(Some(conv)),
+            Err(err) => {
+                self.chat_widget
+                    .add_error_message(format!("Failed to access active conversation: {err}"));
+                Ok(None)
+            }
+        }
+    }
+
+    async fn send_unified_exec_input(&mut self, session_id: i32, input: String) -> Result<()> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(()),
+        };
+
+        let mut chunk = input;
+        if !chunk.ends_with('\n') {
+            chunk.push('\n');
+        }
+        let chunks = vec![chunk];
+        match conversation
+            .run_unified_exec(Some(session_id), &chunks, None)
+            .await
+        {
+            Ok(_) => {}
+            Err(UnifiedExecError::UnknownSessionId { .. }) => {
+                self.chat_widget
+                    .add_info_message(format!("Session {session_id} is no longer active."), None);
+            }
+            Err(err) => {
+                self.chat_widget
+                    .add_error_message(format!("Failed to send input: {err}"));
+            }
+        }
+
+        self.refresh_process_manager().await?;
+        Ok(())
+    }
+
+    async fn kill_unified_exec_session(&mut self, session_id: i32) -> Result<()> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(()),
+        };
+
+        if !conversation.kill_unified_exec_session(session_id).await {
+            self.chat_widget
+                .add_info_message(format!("Session {session_id} is no longer running."), None);
+        }
+
+        self.refresh_process_manager().await?;
+        Ok(())
+    }
+
+    async fn remove_unified_exec_session(&mut self, session_id: i32) -> Result<()> {
+        let conversation = match self.conversation_for_unified_exec().await? {
+            Some(conv) => conv,
+            None => return Ok(()),
+        };
+
+        if !conversation.remove_unified_exec_session(session_id).await {
+            self.chat_widget
+                .add_info_message(format!("Session {session_id} is no longer tracked."), None);
+        }
+
+        self.refresh_process_manager().await?;
         Ok(())
     }
 
@@ -725,6 +980,7 @@ mod tests {
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             backtrack: BacktrackState::default(),
             pending_update_action: None,
+            latest_process_manager_entries: Vec::new(),
         }
     }
 

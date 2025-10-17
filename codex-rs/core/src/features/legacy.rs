@@ -14,6 +14,10 @@ const ALIASES: &[Alias] = &[
         feature: Feature::UnifiedExec,
     },
     Alias {
+        legacy_key: "use_unified_exec_tool",
+        feature: Feature::UnifiedExec,
+    },
+    Alias {
         legacy_key: "experimental_use_exec_command_tool",
         feature: Feature::StreamableShell,
     },
@@ -61,6 +65,7 @@ pub struct LegacyFeatureToggles {
     pub experimental_use_freeform_apply_patch: Option<bool>,
     pub experimental_use_exec_command_tool: Option<bool>,
     pub experimental_use_unified_exec_tool: Option<bool>,
+    pub use_unified_exec_tool: Option<bool>,
     pub experimental_use_rmcp_client: Option<bool>,
     pub tools_web_search: Option<bool>,
     pub tools_view_image: Option<bool>,
@@ -97,6 +102,12 @@ impl LegacyFeatureToggles {
             Feature::UnifiedExec,
             self.experimental_use_unified_exec_tool,
             "experimental_use_unified_exec_tool",
+        );
+        set_if_some(
+            features,
+            Feature::UnifiedExec,
+            self.use_unified_exec_tool,
+            "use_unified_exec_tool",
         );
         set_if_some(
             features,

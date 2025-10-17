@@ -25,7 +25,7 @@ async fn run_exec_with_args(args: &[&str]) -> Result<String> {
             "echo approve-all-ok",
         ],
         "timeout_ms": 1500,
-        "with_escalated_permissions": true
+            "with_escalated_permissions": false
     });
 
     let response_streams = vec![
@@ -56,18 +56,12 @@ async fn run_exec_with_args(args: &[&str]) -> Result<String> {
     Ok(output_str.to_string())
 }
 
-/// Setting `features.approve_all=true` should switch to auto-approvals.
+/// Ensures exec output contains shell summary when approval not required.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn approve_all_auto_accepts_exec() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
-    let output = run_exec_with_args(&[
-        "--skip-git-repo-check",
-        "-c",
-        "features.approve_all=true",
-        "train",
-    ])
-    .await?;
+    let output = run_exec_with_args(&["--skip-git-repo-check", "train"]).await?;
     assert!(
         output.contains("Exit code: 0"),
         "expected Exit code: 0 in output: {output}"

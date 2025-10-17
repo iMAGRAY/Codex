@@ -3,27 +3,42 @@ mod seek_sequence;
 mod standalone_executable;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fmt;
 use std::fs;
+use std::io::Write as _;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
+use std::process::Stdio;
+use std::process::{self};
 use std::str::Utf8Error;
-use std::sync::LazyLock;
+use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use anyhow::Context;
 use anyhow::Result;
+use encoding_rs::Encoding;
+use filetime::FileTime;
 pub use parser::Hunk;
 pub use parser::ParseError;
 use parser::ParseError::*;
 use parser::UpdateFileChunk;
 pub use parser::parse_patch;
+use serde_json::json;
+use similar::ChangeTag;
 use similar::TextDiff;
 use thiserror::Error;
 use tree_sitter::LanguageError;
+use tree_sitter::Node;
 use tree_sitter::Parser;
-use tree_sitter::Query;
-use tree_sitter::QueryCursor;
-use tree_sitter::StreamingIterator;
 use tree_sitter_bash::LANGUAGE as BASH;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use tempfile::Builder as TempFileBuilder;
 
 pub use standalone_executable::main;
 
@@ -32,6 +47,7 @@ pub const APPLY_PATCH_TOOL_INSTRUCTIONS: &str = include_str!("../apply_patch_too
 
 const APPLY_PATCH_COMMANDS: [&str; 2] = ["apply_patch", "applypatch"];
 const BEGIN_PATCH_COMMANDS: [&str; 2] = ["begin_patch", "beginpatch"];
+const APPLY_PATCH_MACHINE_SCHEMA: &str = "apply_patch/v2";
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ApplyPatchError {
@@ -41,12 +57,29 @@ pub enum ApplyPatchError {
     IoError(#[from] IoError),
     /// Error that occurs while computing replacements when applying patch chunks
     #[error("{0}")]
-    ComputeReplacements(String),
+    ComputeReplacements(Box<ConflictDiagnostic>),
+    /// Patch application produced a report with failed operations.
+    #[error("{0}")]
+    Execution(Box<PatchExecutionError>),
     /// A raw patch body was provided without an explicit `apply_patch` invocation.
     #[error(
         "patch detected without explicit call to apply_patch. Rerun as [\"apply_patch\", \"<patch>\"]"
     )]
     ImplicitInvocation,
+    #[error("unsupported encoding '{0}'")]
+    UnsupportedEncoding(String),
+    #[error("encoding error: {0}")]
+    EncodingError(String),
+}
+
+impl ApplyPatchError {
+    pub fn conflict(&self) -> Option<&ConflictDiagnostic> {
+        match self {
+            ApplyPatchError::ComputeReplacements(details) => Some(details.as_ref()),
+            ApplyPatchError::Execution(exec) => exec.conflict(),
+            _ => None,
+        }
+    }
 }
 
 impl From<std::io::Error> for ApplyPatchError {
@@ -266,19 +299,14 @@ pub fn maybe_parse_begin_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
 /// Extract the heredoc body (and optional `cd` workdir) from a `bash -lc` script
 /// that invokes the apply_patch tool using a heredoc.
 ///
-/// Supported top‑level forms (must be the only top‑level statement):
-/// - `apply_patch <<'EOF'\n...\nEOF`
-/// - `cd <path> && apply_patch <<'EOF'\n...\nEOF`
-///
-/// Notes about matching:
-/// - Parsed with Tree‑sitter Bash and a strict query that uses anchors so the
-///   heredoc‑redirected statement is the only top‑level statement.
-/// - The connector between `cd` and `apply_patch` must be `&&` (not `|` or `||`).
-/// - Exactly one positional `word` argument is allowed for `cd` (no flags, no quoted
-///   strings, no second argument).
-/// - The apply command is validated in‑query via `#any-of?` to allow `apply_patch`
-///   or `applypatch`.
-/// - Preceding or trailing commands (e.g., `echo ...;` or `... && echo done`) do not match.
+/// Accepted scripts must contain a single heredoc redirected statement that invokes
+/// `apply_patch`. Optional preparatory commands such as `set -e` or a standalone
+/// `cd <path>` may precede the statement on separate lines. Within the redirected
+/// statement we allow either a bare `apply_patch <<'EOF' ... EOF` or a guarded
+/// `... &&/; cd <path> && apply_patch <<'EOF' ... EOF`, where the inline `cd` supplies
+/// the working directory for the patch (the last such `cd` wins). We reject constructs
+/// involving pipes or `||`, as well as trailing commands after `apply_patch`, because
+/// those alter execution semantics we cannot reproduce safely.
 ///
 /// Returns `(heredoc_body, Some(path))` when the `cd` variant matches, or
 /// `(heredoc_body, None)` for the direct form. Errors are returned if the script
@@ -286,74 +314,6 @@ pub fn maybe_parse_begin_patch_verified(argv: &[String], cwd: &Path) -> MaybeApp
 fn extract_apply_patch_from_bash(
     src: &str,
 ) -> std::result::Result<(String, Option<String>), ExtractHeredocError> {
-    // This function uses a Tree-sitter query to recognize one of two
-    // whole-script forms, each expressed as a single top-level statement:
-    //
-    // 1. apply_patch <<'EOF'\n...\nEOF
-    // 2. cd <path> && apply_patch <<'EOF'\n...\nEOF
-    //
-    // Key ideas when reading the query:
-    // - dots (`.`) between named nodes enforces adjacency among named children and
-    //   anchor to the start/end of the expression.
-    // - we match a single redirected_statement directly under program with leading
-    //   and trailing anchors (`.`). This ensures it is the only top-level statement
-    //   (so prefixes like `echo ...;` or suffixes like `... && echo done` do not match).
-    //
-    // Overall, we want to be conservative and only match the intended forms, as other
-    // forms are likely to be model errors, or incorrectly interpreted by later code.
-    //
-    // If you're editing this query, it's helpful to start by creating a debugging binary
-    // which will let you see the AST of an arbitrary bash script passed in, and optionally
-    // also run an arbitrary query against the AST. This is useful for understanding
-    // how tree-sitter parses the script and whether the query syntax is correct. Be sure
-    // to test both positive and negative cases.
-    static APPLY_PATCH_QUERY: LazyLock<Query> = LazyLock::new(|| {
-        let language = BASH.into();
-        #[expect(clippy::expect_used)]
-        Query::new(
-            &language,
-            r#"
-            (
-              program
-                . (redirected_statement
-                    body: (command
-                            name: (command_name (word) @apply_name) .)
-                    (#any-of? @apply_name "apply_patch" "applypatch")
-                    redirect: (heredoc_redirect
-                                . (heredoc_start)
-                                . (heredoc_body) @heredoc
-                                . (heredoc_end)
-                                .))
-                .)
-
-            (
-              program
-                . (redirected_statement
-                    body: (list
-                            . (command
-                                name: (command_name (word) @cd_name) .
-                                argument: [
-                                  (word) @cd_path
-                                  (string (string_content) @cd_path)
-                                  (raw_string) @cd_raw_string
-                                ] .)
-                            "&&"
-                            . (command
-                                name: (command_name (word) @apply_name))
-                            .)
-                    (#eq? @cd_name "cd")
-                    (#any-of? @apply_name "apply_patch" "applypatch")
-                    redirect: (heredoc_redirect
-                                . (heredoc_start)
-                                . (heredoc_body) @heredoc
-                                . (heredoc_end)
-                                .))
-                .)
-            "#,
-        )
-        .expect("valid bash query")
-    });
-
     let lang = BASH.into();
     let mut parser = Parser::new();
     parser
@@ -363,56 +323,349 @@ fn extract_apply_patch_from_bash(
         .parse(src, None)
         .ok_or(ExtractHeredocError::FailedToParsePatchIntoAst)?;
 
-    let bytes = src.as_bytes();
     let root = tree.root_node();
+    let bytes = src.as_bytes();
 
-    let mut cursor = QueryCursor::new();
-    let mut matches = cursor.matches(&APPLY_PATCH_QUERY, root, bytes);
-    while let Some(m) = matches.next() {
-        let mut heredoc_text: Option<String> = None;
-        let mut cd_path: Option<String> = None;
+    let mut cursor = root.walk();
+    let children: Vec<Node> = root.named_children(&mut cursor).collect();
 
-        for capture in m.captures.iter() {
-            let name = APPLY_PATCH_QUERY.capture_names()[capture.index as usize];
-            match name {
-                "heredoc" => {
-                    let text = capture
-                        .node
-                        .utf8_text(bytes)
-                        .map_err(ExtractHeredocError::HeredocNotUtf8)?
-                        .trim_end_matches('\n')
-                        .to_string();
-                    heredoc_text = Some(text);
+    let mut workdir_from_prefix: Option<String> = None;
+    let mut result: Option<(String, Option<String>)> = None;
+
+    for (idx, child) in children.iter().enumerate() {
+        match child.kind() {
+            "command" => {
+                if result.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
                 }
-                "cd_path" => {
-                    let text = capture
-                        .node
-                        .utf8_text(bytes)
-                        .map_err(ExtractHeredocError::HeredocNotUtf8)?
-                        .to_string();
-                    cd_path = Some(text);
-                }
-                "cd_raw_string" => {
-                    let raw = capture
-                        .node
-                        .utf8_text(bytes)
-                        .map_err(ExtractHeredocError::HeredocNotUtf8)?;
-                    let trimmed = raw
-                        .strip_prefix('\'')
-                        .and_then(|s| s.strip_suffix('\''))
-                        .unwrap_or(raw);
-                    cd_path = Some(trimmed.to_string());
-                }
-                _ => {}
+                match classify_prefix_command(*child, bytes)? {
+                    PrefixCommand::Cd(path) => workdir_from_prefix = Some(path),
+                    PrefixCommand::Allowed => {}
+                };
             }
-        }
-
-        if let Some(heredoc) = heredoc_text {
-            return Ok((heredoc, cd_path));
+            "redirected_statement" => {
+                if result.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+                if let Some((patch, inline_workdir)) = parse_apply_patch_redirected(*child, bytes)?
+                {
+                    if idx + 1 != children.len() {
+                        return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                    }
+                    let workdir = inline_workdir.or(workdir_from_prefix.clone());
+                    result = Some((patch, workdir));
+                } else {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+            }
+            "comment" => {
+                if result.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+            }
+            _ => {
+                if result.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+                // conservative fallback: unknown constructs mean we cannot extract apply_patch safely
+                return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+            }
         }
     }
 
+    result.ok_or(ExtractHeredocError::CommandDidNotStartWithApplyPatch)
+}
+
+enum PrefixCommand {
+    Cd(String),
+    Allowed,
+}
+
+fn classify_prefix_command(
+    command: Node,
+    bytes: &[u8],
+) -> std::result::Result<PrefixCommand, ExtractHeredocError> {
+    if let Some(path) = parse_cd_command(command, bytes)? {
+        return Ok(PrefixCommand::Cd(path));
+    }
+    if parse_set_command(command, bytes)? {
+        return Ok(PrefixCommand::Allowed);
+    }
     Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch)
+}
+
+fn parse_set_command(
+    command: Node,
+    bytes: &[u8],
+) -> std::result::Result<bool, ExtractHeredocError> {
+    if command.kind() != "command" {
+        return Ok(false);
+    }
+
+    let mut cursor = command.walk();
+    let mut name: Option<String> = None;
+
+    for child in command.named_children(&mut cursor) {
+        match child.kind() {
+            "command_name" => name = Some(node_text(child, bytes)?),
+            "comment" => {}
+            _ => {}
+        }
+    }
+
+    Ok(matches!(name.as_deref(), Some("set")))
+}
+
+fn parse_apply_patch_redirected(
+    node: Node,
+    bytes: &[u8],
+) -> std::result::Result<Option<(String, Option<String>)>, ExtractHeredocError> {
+    let Some(body) = node.child_by_field_name("body") else {
+        return Ok(None);
+    };
+
+    let mut workdir: Option<String> = None;
+
+    let matches_apply = match body.kind() {
+        "command" => parse_apply_patch_command(body, bytes)?,
+        "list" => {
+            let (is_apply_patch, cd_path) = parse_apply_patch_list(body, bytes)?;
+            workdir = cd_path;
+            is_apply_patch
+        }
+        _ => false,
+    };
+
+    if !matches_apply {
+        return Ok(None);
+    }
+
+    let patch = extract_heredoc_body(node, bytes)?;
+    Ok(Some((patch, workdir)))
+}
+
+fn parse_apply_patch_command(
+    command: Node,
+    bytes: &[u8],
+) -> std::result::Result<bool, ExtractHeredocError> {
+    let mut cursor = command.walk();
+    let mut name: Option<String> = None;
+    let mut extra_args = 0usize;
+
+    for child in command.named_children(&mut cursor) {
+        match child.kind() {
+            "command_name" => {
+                name = Some(node_text(child, bytes)?);
+            }
+            "word" | "string" | "raw_string" | "command_substitution" | "process_substitution" => {
+                extra_args += 1;
+            }
+            "variable_assignment" => {
+                extra_args += 1;
+            }
+            "comment" => {}
+            _ => {
+                extra_args += 1;
+            }
+        }
+    }
+
+    let Some(name) = name else {
+        return Ok(false);
+    };
+    if matches!(name.as_str(), "apply_patch" | "applypatch") && extra_args == 0 {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn parse_apply_patch_list(
+    list: Node,
+    bytes: &[u8],
+) -> std::result::Result<(bool, Option<String>), ExtractHeredocError> {
+    let mut commands = Vec::new();
+    let mut connectors = Vec::new();
+    flatten_list(list, bytes, &mut commands, &mut connectors)?;
+
+    if commands.is_empty() {
+        return Ok((false, None));
+    }
+
+    for connector in &connectors {
+        if !is_allowed_connector(connector) {
+            return Ok((false, None));
+        }
+    }
+
+    let mut workdir: Option<String> = None;
+    if commands.len() > 1 {
+        for command in &commands[0..commands.len() - 1] {
+            if let Some(path) = parse_cd_command(*command, bytes)? {
+                workdir = Some(path);
+                continue;
+            }
+            if parse_set_command(*command, bytes)? {
+                continue;
+            }
+            return Ok((false, None));
+        }
+    }
+
+    let Some(&last) = commands.last() else {
+        return Ok((false, None));
+    };
+    if !parse_apply_patch_command(last, bytes)? {
+        return Ok((false, None));
+    }
+
+    Ok((true, workdir))
+}
+
+fn flatten_list<'tree>(
+    list: Node<'tree>,
+    bytes: &[u8],
+    commands: &mut Vec<Node<'tree>>,
+    connectors: &mut Vec<String>,
+) -> std::result::Result<(), ExtractHeredocError> {
+    for idx in 0..list.child_count() {
+        let Some(child) = list.child(idx) else {
+            return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+        };
+        match child.kind() {
+            "command" => commands.push(child),
+            "list" => flatten_list(child, bytes, commands, connectors)?,
+            "comment" => {}
+            _ if child.is_named() => {
+                return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+            }
+            _ => {
+                let text = node_text(child, bytes)?;
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    connectors.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_allowed_connector(connector: &str) -> bool {
+    matches!(connector, "&&" | ";")
+}
+
+fn parse_cd_command(
+    command: Node,
+    bytes: &[u8],
+) -> std::result::Result<Option<String>, ExtractHeredocError> {
+    if command.kind() != "command" {
+        return Ok(None);
+    }
+
+    let mut cursor = command.walk();
+    let mut named = command.named_children(&mut cursor);
+
+    let Some(name_node) = named.next() else {
+        return Ok(None);
+    };
+    if name_node.kind() != "command_name" {
+        return Ok(None);
+    }
+
+    let name = node_text(name_node, bytes)?;
+    if name != "cd" {
+        return Ok(None);
+    }
+
+    let mut arg: Option<String> = None;
+    for child in named {
+        match child.kind() {
+            "word" => {
+                if arg.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+                arg = Some(node_text(child, bytes)?);
+            }
+            "string" => {
+                if arg.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+                arg = Some(extract_double_quoted(child, bytes)?);
+            }
+            "raw_string" => {
+                if arg.is_some() {
+                    return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+                }
+                arg = Some(extract_single_quoted(child, bytes)?);
+            }
+            "comment" => {}
+            _ => {
+                return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+            }
+        }
+    }
+
+    let Some(path) = arg else {
+        return Err(ExtractHeredocError::CommandDidNotStartWithApplyPatch);
+    };
+    Ok(Some(path))
+}
+
+fn extract_heredoc_body(
+    node: Node,
+    bytes: &[u8],
+) -> std::result::Result<String, ExtractHeredocError> {
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if child.kind() != "heredoc_redirect" {
+            continue;
+        }
+        let mut redirect_cursor = child.walk();
+        for redirect_child in child.named_children(&mut redirect_cursor) {
+            if redirect_child.kind() == "heredoc_body" {
+                let text = redirect_child
+                    .utf8_text(bytes)
+                    .map_err(ExtractHeredocError::HeredocNotUtf8)?
+                    .trim_end_matches('\n')
+                    .to_string();
+                return Ok(text);
+            }
+        }
+    }
+    Err(ExtractHeredocError::FailedToFindHeredocBody)
+}
+
+fn node_text(node: Node, bytes: &[u8]) -> std::result::Result<String, ExtractHeredocError> {
+    Ok(node
+        .utf8_text(bytes)
+        .map_err(ExtractHeredocError::HeredocNotUtf8)?
+        .to_string())
+}
+
+fn extract_double_quoted(
+    node: Node,
+    bytes: &[u8],
+) -> std::result::Result<String, ExtractHeredocError> {
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if child.kind() == "string_content" {
+            return node_text(child, bytes);
+        }
+    }
+    Ok(String::new())
+}
+
+fn extract_single_quoted(
+    node: Node,
+    bytes: &[u8],
+) -> std::result::Result<String, ExtractHeredocError> {
+    let text = node_text(node, bytes)?;
+    let stripped = text
+        .strip_prefix('\'')
+        .and_then(|s| s.strip_suffix('\''))
+        .unwrap_or(text.as_str());
+    Ok(stripped.to_string())
 }
 
 fn maybe_extract_begin_patch_args(
@@ -486,18 +739,20 @@ fn maybe_extract_begin_patch_args(
                     if other == "--stdout-schema" {
                         idx += 1;
                     }
-                } else if matches!(
-                    other,
-                    "--dry-run"
-                        | "--plan"
-                        | "--no-summary"
-                        | "--no-logs"
-                        | "--machine"
-                        | "--preset"
-                ) {
-                    if other == "--preset" {
-                        idx += 1;
+                } else if matches!(other, "--dry-run" | "--plan" | "--no-summary" | "--no-logs") {
+                    // handled at the begin_patch layer
+                } else if other == "--machine" {
+                    apply_command.push(other.to_string());
+                } else if other == "--preset" {
+                    idx += 1;
+                    if idx >= argv.len() {
+                        return Err(ApplyPatchError::IoError(IoError {
+                            context: "begin_patch missing value for --preset".to_string(),
+                            source: std::io::Error::other("missing value"),
+                        }));
                     }
+                    apply_command.push(other.to_string());
+                    apply_command.push(argv[idx].clone());
                 } else if other.starts_with("-f") && other.len() > 2 {
                     patch_file = Some(PathBuf::from(&other[2..]));
                     apply_command.push(format!("-f{}", &other[2..]));
@@ -617,14 +872,22 @@ pub enum ExtractHeredocError {
     FailedToFindHeredocBody,
 }
 
-/// Applies the patch and prints the result to stdout/stderr.
+pub fn apply_patch_with_config(
+    patch: &str,
+    config: &ApplyPatchConfig,
+) -> Result<PatchReport, ApplyPatchError> {
+    let args = parse_patch(patch)?;
+    apply_hunks_with_config(&args.hunks, config)
+}
+
+/// Applies the patch and prints a begin_patch-style summary to stdout/stderr.
 pub fn apply_patch(
     patch: &str,
     stdout: &mut impl std::io::Write,
     stderr: &mut impl std::io::Write,
 ) -> Result<(), ApplyPatchError> {
-    let hunks = match parse_patch(patch) {
-        Ok(source) => source.hunks,
+    let args = match parse_patch(patch) {
+        Ok(args) => args,
         Err(e) => {
             match &e {
                 InvalidPatchError(message) => {
@@ -645,9 +908,17 @@ pub fn apply_patch(
         }
     };
 
-    apply_hunks(&hunks, stdout, stderr)?;
-
-    Ok(())
+    let config = ApplyPatchConfig::default();
+    match apply_hunks_with_config(&args.hunks, &config) {
+        Ok(report) => {
+            emit_report(stdout, &report).map_err(ApplyPatchError::from)?;
+            Ok(())
+        }
+        Err(err) => {
+            writeln!(stderr, "{err}").map_err(ApplyPatchError::from)?;
+            Err(err)
+        }
+    }
 }
 
 /// Applies hunks and continues to update stdout/stderr
@@ -656,172 +927,1274 @@ pub fn apply_hunks(
     stdout: &mut impl std::io::Write,
     stderr: &mut impl std::io::Write,
 ) -> Result<(), ApplyPatchError> {
-    let _existing_paths: Vec<&Path> = hunks
-        .iter()
-        .filter_map(|hunk| match hunk {
-            Hunk::AddFile { .. } => {
-                // The file is being added, so it doesn't exist yet.
-                None
-            }
-            Hunk::DeleteFile { path } => Some(path.as_path()),
-            Hunk::UpdateFile {
-                path, move_path, ..
-            } => match move_path {
-                Some(move_path) => {
-                    if std::fs::metadata(move_path)
-                        .map(|m| m.is_file())
-                        .unwrap_or(false)
-                    {
-                        Some(move_path.as_path())
-                    } else {
-                        None
-                    }
-                }
-                None => Some(path.as_path()),
-            },
-        })
-        .collect::<Vec<&Path>>();
-
-    // Delegate to a helper that applies each hunk to the filesystem.
-    match apply_hunks_to_files(hunks) {
-        Ok(affected) => {
-            print_summary(&affected, stdout).map_err(ApplyPatchError::from)?;
+    let config = ApplyPatchConfig::default();
+    match apply_hunks_with_config(hunks, &config) {
+        Ok(report) => {
+            emit_report(stdout, &report).map_err(ApplyPatchError::from)?;
             Ok(())
         }
         Err(err) => {
-            let msg = err.to_string();
-            writeln!(stderr, "{msg}").map_err(ApplyPatchError::from)?;
-            if let Some(io) = err.downcast_ref::<std::io::Error>() {
-                Err(ApplyPatchError::from(io))
-            } else {
-                Err(ApplyPatchError::IoError(IoError {
-                    context: msg,
-                    source: std::io::Error::other(err),
-                }))
-            }
+            writeln!(stderr, "{err}").map_err(ApplyPatchError::from)?;
+            Err(err)
         }
     }
 }
 
-/// Applies each parsed patch hunk to the filesystem.
-/// Returns an error if any of the changes could not be applied.
-/// Tracks file paths affected by applying a patch.
-pub struct AffectedPaths {
-    pub added: Vec<PathBuf>,
-    pub modified: Vec<PathBuf>,
-    pub deleted: Vec<PathBuf>,
+#[derive(Debug)]
+enum AppliedChange {
+    Add {
+        path: PathBuf,
+    },
+    Update {
+        original: PathBuf,
+        dest: PathBuf,
+        backup_path: PathBuf,
+    },
+    Delete {
+        original: PathBuf,
+        backup_path: PathBuf,
+    },
 }
 
-/// Apply the hunks to the filesystem, returning which files were added, modified, or deleted.
-/// Returns an error if the patch could not be applied.
-fn apply_hunks_to_files(hunks: &[Hunk]) -> anyhow::Result<AffectedPaths> {
-    if hunks.is_empty() {
-        anyhow::bail!("No files were modified.");
+#[derive(Debug)]
+struct PlannedChange {
+    summary_index: usize,
+    kind: PlannedChangeKind,
+}
+
+#[derive(Debug)]
+enum PlannedChangeKind {
+    Add {
+        path: PathBuf,
+        content: String,
+        line_ending: LineEnding,
+    },
+    Update {
+        original: PathBuf,
+        dest: PathBuf,
+        new_content: String,
+        line_ending: LineEnding,
+        metadata: FileMetadataSnapshot,
+        reference_had_final_newline: bool,
+    },
+    Delete {
+        path: PathBuf,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationStatus {
+    Planned,
+    Applied,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationAction {
+    Add,
+    Update,
+    Move,
+    Delete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationSummary {
+    pub action: OperationAction,
+    pub path: PathBuf,
+    pub target_path: Option<PathBuf>,
+    pub lines_added: usize,
+    pub lines_removed: usize,
+    pub status: OperationStatus,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PatchReportMode {
+    Apply,
+    DryRun,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PatchReportStatus {
+    Success,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatchReport {
+    pub mode: PatchReportMode,
+    pub status: PatchReportStatus,
+    pub duration_ms: u128,
+    pub operations: Vec<OperationSummary>,
+    pub options: ReportOptions,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ApplyPatchConfig {
+    pub root: PathBuf,
+    pub mode: PatchReportMode,
+    pub encoding: String,
+    pub normalization: NormalizationOptions,
+    pub preserve_mode: bool,
+    pub preserve_times: bool,
+    pub new_file_mode: Option<u32>,
+}
+
+impl Default for ApplyPatchConfig {
+    fn default() -> Self {
+        Self {
+            root: PathBuf::from("."),
+            mode: PatchReportMode::Apply,
+            encoding: "utf-8".to_string(),
+            normalization: NormalizationOptions::default(),
+            preserve_mode: true,
+            preserve_times: true,
+            new_file_mode: None,
+        }
+    }
+}
+
+impl OperationSummary {
+    fn new(action: OperationAction, path: PathBuf) -> Self {
+        Self {
+            action,
+            path,
+            target_path: None,
+            lines_added: 0,
+            lines_removed: 0,
+            status: OperationStatus::Applied,
+            message: None,
+        }
     }
 
-    let mut added: Vec<PathBuf> = Vec::new();
-    let mut modified: Vec<PathBuf> = Vec::new();
-    let mut deleted: Vec<PathBuf> = Vec::new();
+    fn with_target(mut self, target: PathBuf) -> Self {
+        self.target_path = Some(target);
+        self
+    }
+
+    fn with_added(mut self, added: usize) -> Self {
+        self.lines_added = added;
+        self
+    }
+
+    fn with_removed(mut self, removed: usize) -> Self {
+        self.lines_removed = removed;
+        self
+    }
+
+    fn with_status(mut self, status: OperationStatus) -> Self {
+        self.status = status;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NewlineMode {
+    Preserve,
+    Lf,
+    Crlf,
+    Native,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineEnding {
+    kind: LineEndingKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineEndingKind {
+    Lf,
+    Crlf,
+    Cr,
+}
+
+impl LineEnding {
+    fn detected(input: &str) -> Option<Self> {
+        if input.contains("\r\n") {
+            return Some(Self {
+                kind: LineEndingKind::Crlf,
+            });
+        }
+        if input.contains('\r') {
+            return Some(Self {
+                kind: LineEndingKind::Cr,
+            });
+        }
+        if input.contains('\n') {
+            return Some(Self {
+                kind: LineEndingKind::Lf,
+            });
+        }
+        None
+    }
+
+    fn from_newline_mode(mode: NewlineMode) -> Self {
+        match mode {
+            NewlineMode::Lf => Self {
+                kind: LineEndingKind::Lf,
+            },
+            NewlineMode::Crlf => Self {
+                kind: LineEndingKind::Crlf,
+            },
+            NewlineMode::Native => Self::native(),
+            NewlineMode::Preserve => Self::native(),
+        }
+    }
+
+    fn native() -> Self {
+        if cfg!(windows) {
+            Self {
+                kind: LineEndingKind::Crlf,
+            }
+        } else {
+            Self {
+                kind: LineEndingKind::Lf,
+            }
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self.kind {
+            LineEndingKind::Lf => "\n",
+            LineEndingKind::Crlf => "\r\n",
+            LineEndingKind::Cr => "\r",
+        }
+    }
+}
+
+impl Default for LineEnding {
+    fn default() -> Self {
+        Self::native()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NormalizationOptions {
+    pub newline: NewlineMode,
+    pub strip_trailing_whitespace: bool,
+    pub ensure_final_newline: Option<bool>,
+}
+
+impl Default for NormalizationOptions {
+    fn default() -> Self {
+        Self {
+            newline: NewlineMode::Preserve,
+            strip_trailing_whitespace: false,
+            ensure_final_newline: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FileMetadataSnapshot {
+    permissions: Option<u32>,
+    accessed: Option<SystemTime>,
+    modified: Option<SystemTime>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReportOptions {
+    pub encoding: String,
+    pub newline: NewlineMode,
+    pub strip_trailing_whitespace: bool,
+    pub ensure_final_newline: Option<bool>,
+    pub preserve_mode: bool,
+    pub preserve_times: bool,
+    pub new_file_mode: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictDiagnostic {
+    message: String,
+    pub path: PathBuf,
+    pub kind: ConflictKind,
+    pub hunk_context: Option<String>,
+    pub expected: Vec<String>,
+    pub actual: Vec<String>,
+    pub diff_hint: Vec<String>,
+}
+
+impl ConflictDiagnostic {
+    fn new(
+        message: String,
+        path: PathBuf,
+        kind: ConflictKind,
+        hunk_context: Option<String>,
+        expected: Vec<String>,
+        actual: Vec<String>,
+        diff_hint: Vec<String>,
+    ) -> Self {
+        Self {
+            message,
+            path,
+            kind,
+            hunk_context,
+            expected,
+            actual,
+            diff_hint,
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for ConflictDiagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConflictKind {
+    ContextNotFound,
+    UnexpectedContent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatchExecutionError {
+    pub message: String,
+    pub report: PatchReport,
+    pub conflict: Option<ConflictDiagnostic>,
+}
+
+impl fmt::Display for PatchExecutionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for PatchExecutionError {}
+
+impl PatchExecutionError {
+    pub fn conflict(&self) -> Option<&ConflictDiagnostic> {
+        self.conflict.as_ref()
+    }
+}
+
+impl ConflictDiagnostic {
+    pub fn diff_hint(&self) -> &[String] {
+        &self.diff_hint
+    }
+}
+
+impl From<&ApplyPatchConfig> for ReportOptions {
+    fn from(config: &ApplyPatchConfig) -> Self {
+        Self {
+            encoding: config.encoding.clone(),
+            newline: config.normalization.newline,
+            strip_trailing_whitespace: config.normalization.strip_trailing_whitespace,
+            ensure_final_newline: config.normalization.ensure_final_newline,
+            preserve_mode: config.preserve_mode,
+            preserve_times: config.preserve_times,
+            new_file_mode: config.new_file_mode,
+        }
+    }
+}
+impl NormalizationOptions {
+    fn target_line_ending(&self, original: LineEnding) -> LineEnding {
+        match self.newline {
+            NewlineMode::Preserve => original,
+            NewlineMode::Lf => LineEnding {
+                kind: LineEndingKind::Lf,
+            },
+            NewlineMode::Crlf => LineEnding {
+                kind: LineEndingKind::Crlf,
+            },
+            NewlineMode::Native => LineEnding::native(),
+        }
+    }
+}
+
+impl NewlineMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            NewlineMode::Preserve => "preserve",
+            NewlineMode::Lf => "lf",
+            NewlineMode::Crlf => "crlf",
+            NewlineMode::Native => "native",
+        }
+    }
+}
+
+impl FileMetadataSnapshot {
+    fn from_path(path: &Path) -> anyhow::Result<Self> {
+        let metadata = fs::metadata(path)
+            .with_context(|| format!("Failed to read metadata for {}", path.display()))?;
+        #[cfg(unix)]
+        let permissions = Some(std::os::unix::fs::PermissionsExt::mode(
+            &metadata.permissions(),
+        ));
+        #[cfg(not(unix))]
+        let permissions = None;
+        let accessed = metadata.accessed().ok();
+        let modified = metadata.modified().ok();
+        Ok(Self {
+            permissions,
+            accessed,
+            modified,
+        })
+    }
+}
+
+fn resolve_path(root: &Path, relative: &Path) -> anyhow::Result<PathBuf> {
+    if relative.is_absolute() {
+        return Ok(relative.to_path_buf());
+    }
+    for component in relative.components() {
+        if matches!(component, Component::ParentDir) {
+            anyhow::bail!("Path {} may not contain '..' segments", relative.display());
+        }
+    }
+    Ok(root.join(relative))
+}
+
+fn read_file_with_encoding(path: &Path, encoding: &str) -> anyhow::Result<String> {
+    let bytes = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    decode_content(&bytes, encoding).map_err(anyhow::Error::new)
+}
+
+fn normalize_content(
+    content: &str,
+    options: &NormalizationOptions,
+    reference_line_ending: LineEnding,
+    reference_had_final_newline: Option<bool>,
+) -> String {
+    let mut canonical = content.replace("\r\n", "\n").replace('\r', "\n");
+
+    if options.strip_trailing_whitespace {
+        canonical = canonical
+            .split('\n')
+            .map(|segment| segment.trim_end_matches([' ', '\t']).to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+
+    let target = options.target_line_ending(reference_line_ending);
+    let newline_seq = target.as_str();
+
+    let mut normalized = if newline_seq == "\n" {
+        canonical
+    } else {
+        canonical.replace('\n', newline_seq)
+    };
+
+    match options.ensure_final_newline {
+        Some(true) => {
+            if !normalized.is_empty() && !normalized.ends_with(newline_seq) {
+                normalized.push_str(newline_seq);
+            }
+        }
+        Some(false) => {
+            normalized = rstrip_terminal_newlines(normalized, newline_seq);
+        }
+        None => {
+            let should_have_newline = match reference_had_final_newline {
+                Some(value) => value,
+                None => !normalized.is_empty(),
+            };
+            if should_have_newline {
+                if !normalized.is_empty() && !normalized.ends_with(newline_seq) {
+                    normalized.push_str(newline_seq);
+                }
+            } else {
+                normalized = rstrip_terminal_newlines(normalized, newline_seq);
+            }
+        }
+    }
+
+    normalized
+}
+
+fn rstrip_terminal_newlines(mut text: String, newline_seq: &str) -> String {
+    while !text.is_empty() && text.ends_with(newline_seq) {
+        let new_len = text.len().saturating_sub(newline_seq.len());
+        text.truncate(new_len);
+    }
+    text
+}
+
+fn has_trailing_newline(content: &str) -> bool {
+    content.ends_with('\n') || content.ends_with('\r')
+}
+
+fn decode_content(bytes: &[u8], encoding: &str) -> Result<String, ApplyPatchError> {
+    if encoding.eq_ignore_ascii_case("utf-8") {
+        return String::from_utf8(bytes.to_vec())
+            .map_err(|err| ApplyPatchError::EncodingError(err.to_string()));
+    }
+
+    let encoding = Encoding::for_label(encoding.as_bytes())
+        .ok_or_else(|| ApplyPatchError::UnsupportedEncoding(encoding.to_string()))?;
+    let (cow, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        return Err(ApplyPatchError::EncodingError(format!(
+            "Failed to decode bytes using {}",
+            encoding.name()
+        )));
+    }
+    Ok(cow.into_owned())
+}
+
+fn encode_content(content: &str, encoding: &str) -> Result<Vec<u8>, ApplyPatchError> {
+    if encoding.eq_ignore_ascii_case("utf-8") {
+        return Ok(content.as_bytes().to_vec());
+    }
+
+    let encoding = Encoding::for_label(encoding.as_bytes())
+        .ok_or_else(|| ApplyPatchError::UnsupportedEncoding(encoding.to_string()))?;
+    let (cow, _, had_errors) = encoding.encode(content);
+    if had_errors {
+        return Err(ApplyPatchError::EncodingError(format!(
+            "Failed to encode text using {}",
+            encoding.name()
+        )));
+    }
+    Ok(cow.into_owned())
+}
+
+fn apply_metadata(
+    path: &Path,
+    snapshot: &FileMetadataSnapshot,
+    config: &ApplyPatchConfig,
+) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        if config.preserve_mode
+            && let Some(mode) = snapshot.permissions
+        {
+            let perms = std::fs::Permissions::from_mode(mode);
+            fs::set_permissions(path, perms)
+                .with_context(|| format!("Failed to set permissions for {}", path.display()))?;
+        }
+    }
+
+    if config.preserve_times
+        && let (Some(accessed), Some(modified)) = (snapshot.accessed, snapshot.modified)
+    {
+        let atime = FileTime::from_system_time(accessed);
+        let mtime = FileTime::from_system_time(modified);
+        filetime::set_file_times(path, atime, mtime)
+            .with_context(|| format!("Failed to restore timestamps for {}", path.display()))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn apply_new_file_mode(path: &Path, mode: Option<u32>) -> anyhow::Result<()> {
+    if let Some(mode) = mode {
+        let perms = std::fs::Permissions::from_mode(mode);
+        fs::set_permissions(path, perms)
+            .with_context(|| format!("Failed to set permissions for {}", path.display()))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn apply_new_file_mode(_path: &Path, _mode: Option<u32>) -> anyhow::Result<()> {
+    Ok(())
+}
+
+fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    std::fs::create_dir_all(&parent)
+        .with_context(|| format!("Failed to create parent directories for {}", path.display()))?;
+    let mut temp = TempFileBuilder::new()
+        .prefix(".codex_apply_patch_new_")
+        .tempfile_in(&parent)?;
+    temp.as_file_mut()
+        .write_all(bytes)
+        .with_context(|| format!("Failed to write patch contents for {}", path.display()))?;
+    temp.as_file_mut()
+        .sync_all()
+        .with_context(|| format!("Failed to flush patch contents for {}", path.display()))?;
+    temp.persist(path)
+        .with_context(|| format!("Failed to move patch into place for {}", path.display()))?;
+    Ok(())
+}
+
+fn plan_hunks(
+    hunks: &[Hunk],
+    config: &ApplyPatchConfig,
+) -> anyhow::Result<(Vec<OperationSummary>, Vec<PlannedChange>)> {
+    let mut summaries = Vec::new();
+    let mut planned = Vec::new();
+
     for hunk in hunks {
         match hunk {
             Hunk::AddFile { path, contents } => {
-                if let Some(parent) = path.parent()
-                    && !parent.as_os_str().is_empty()
-                {
-                    std::fs::create_dir_all(parent).with_context(|| {
-                        format!("Failed to create parent directories for {}", path.display())
-                    })?;
+                let absolute = resolve_path(&config.root, path)?;
+                let detected = LineEnding::detected(contents)
+                    .unwrap_or_else(|| LineEnding::from_newline_mode(config.normalization.newline));
+                let summary_index = summaries.len();
+
+                if absolute.exists() {
+                    let original = read_file_with_encoding(&absolute, &config.encoding)?;
+                    let (added_lines, removed_lines) = diff_line_counts(&original, contents);
+                    let summary = OperationSummary::new(OperationAction::Update, path.clone())
+                        .with_added(added_lines)
+                        .with_removed(removed_lines)
+                        .with_status(OperationStatus::Planned);
+                    summaries.push(summary);
+                    let line_ending = LineEnding::detected(&original).unwrap_or(detected);
+                    let reference_had_final_newline = has_trailing_newline(&original);
+                    let metadata = FileMetadataSnapshot::from_path(&absolute)?;
+                    planned.push(PlannedChange {
+                        summary_index,
+                        kind: PlannedChangeKind::Update {
+                            original: absolute.clone(),
+                            dest: absolute.clone(),
+                            new_content: contents.clone(),
+                            line_ending,
+                            metadata,
+                            reference_had_final_newline,
+                        },
+                    });
+                } else {
+                    let summary = OperationSummary::new(OperationAction::Add, path.clone())
+                        .with_added(count_lines(contents))
+                        .with_status(OperationStatus::Planned);
+                    summaries.push(summary);
+                    planned.push(PlannedChange {
+                        summary_index,
+                        kind: PlannedChangeKind::Add {
+                            path: absolute,
+                            content: contents.clone(),
+                            line_ending: detected,
+                        },
+                    });
                 }
-                std::fs::write(path, contents)
-                    .with_context(|| format!("Failed to write file {}", path.display()))?;
-                added.push(path.clone());
             }
             Hunk::DeleteFile { path } => {
-                std::fs::remove_file(path)
-                    .with_context(|| format!("Failed to delete file {}", path.display()))?;
-                deleted.push(path.clone());
+                let absolute = resolve_path(&config.root, path)?;
+                if !absolute.exists() {
+                    anyhow::bail!("Cannot delete {} because it does not exist", path.display());
+                }
+                let original = read_file_with_encoding(&absolute, &config.encoding)?;
+                let summary = OperationSummary::new(OperationAction::Delete, path.clone())
+                    .with_removed(count_lines(&original))
+                    .with_status(OperationStatus::Planned);
+                let summary_index = summaries.len();
+                summaries.push(summary);
+                planned.push(PlannedChange {
+                    summary_index,
+                    kind: PlannedChangeKind::Delete { path: absolute },
+                });
             }
             Hunk::UpdateFile {
                 path,
                 move_path,
                 chunks,
             } => {
-                let AppliedPatch { new_contents, .. } =
-                    derive_new_contents_from_chunks(path, chunks)?;
-                if let Some(dest) = move_path {
-                    if let Some(parent) = dest.parent()
-                        && !parent.as_os_str().is_empty()
-                    {
-                        std::fs::create_dir_all(parent).with_context(|| {
-                            format!("Failed to create parent directories for {}", dest.display())
-                        })?;
-                    }
-                    std::fs::write(dest, new_contents)
-                        .with_context(|| format!("Failed to write file {}", dest.display()))?;
-                    std::fs::remove_file(path)
-                        .with_context(|| format!("Failed to remove original {}", path.display()))?;
-                    modified.push(dest.clone());
-                } else {
-                    std::fs::write(path, new_contents)
-                        .with_context(|| format!("Failed to write file {}", path.display()))?;
-                    modified.push(path.clone());
+                let absolute_src = resolve_path(&config.root, path)?;
+                if !absolute_src.exists() {
+                    anyhow::bail!("Cannot update {} because it does not exist", path.display());
                 }
+
+                let AppliedPatch {
+                    original_contents,
+                    new_contents,
+                } = derive_new_contents_from_chunks_with_encoding(
+                    &absolute_src,
+                    chunks,
+                    &config.encoding,
+                )?;
+
+                let reference_had_final_newline = has_trailing_newline(&original_contents);
+
+                let dest_rel = move_path.clone().unwrap_or_else(|| path.clone());
+                let absolute_dest = resolve_path(&config.root, &dest_rel)?;
+                if absolute_dest != absolute_src && absolute_dest.exists() {
+                    anyhow::bail!(
+                        "Cannot move {} to {} because the destination already exists",
+                        path.display(),
+                        dest_rel.display()
+                    );
+                }
+
+                let (added_lines, removed_lines) =
+                    diff_line_counts(&original_contents, &new_contents);
+                let action = if absolute_dest == absolute_src {
+                    OperationAction::Update
+                } else {
+                    OperationAction::Move
+                };
+                let mut summary = OperationSummary::new(action, path.clone())
+                    .with_added(added_lines)
+                    .with_removed(removed_lines)
+                    .with_status(OperationStatus::Planned);
+                if absolute_dest != absolute_src {
+                    summary = summary.with_target(dest_rel.clone());
+                }
+                let line_ending =
+                    LineEnding::detected(&original_contents).unwrap_or_else(LineEnding::native);
+                let summary_index = summaries.len();
+                summaries.push(summary);
+                let metadata = FileMetadataSnapshot::from_path(&absolute_src)?;
+                planned.push(PlannedChange {
+                    summary_index,
+                    kind: PlannedChangeKind::Update {
+                        original: absolute_src.clone(),
+                        dest: absolute_dest,
+                        new_content: new_contents,
+                        line_ending,
+                        metadata,
+                        reference_had_final_newline,
+                    },
+                });
             }
         }
     }
-    Ok(AffectedPaths {
-        added,
-        modified,
-        deleted,
+
+    Ok((summaries, planned))
+}
+
+fn apply_planned_changes(
+    planned: &[PlannedChange],
+    summaries: &mut [OperationSummary],
+    config: &ApplyPatchConfig,
+) -> anyhow::Result<()> {
+    let mut applied: Vec<AppliedChange> = Vec::new();
+
+    for change in planned {
+        let summary = &mut summaries[change.summary_index];
+        let result: anyhow::Result<()> = match &change.kind {
+            PlannedChangeKind::Add {
+                path,
+                content,
+                line_ending,
+            } => {
+                if let Some(parent) = path.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    std::fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create parent directories for {}", path.display())
+                    })?
+                }
+                let normalized =
+                    normalize_content(content, &config.normalization, *line_ending, None);
+                let encoded =
+                    encode_content(&normalized, &config.encoding).map_err(anyhow::Error::new)?;
+                write_atomic_bytes(path, &encoded)?;
+                apply_new_file_mode(path, config.new_file_mode)?;
+                applied.push(AppliedChange::Add { path: path.clone() });
+                Ok(())
+            }
+            PlannedChangeKind::Update {
+                original,
+                dest,
+                new_content,
+                line_ending,
+                metadata,
+                reference_had_final_newline,
+            } => {
+                if let Some(parent) = dest.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    std::fs::create_dir_all(parent).with_context(|| {
+                        format!("Failed to create parent directories for {}", dest.display())
+                    })?
+                }
+                let backup_path = create_backup(original)?;
+                applied.push(AppliedChange::Update {
+                    original: original.clone(),
+                    dest: dest.clone(),
+                    backup_path,
+                });
+                let normalized = normalize_content(
+                    new_content,
+                    &config.normalization,
+                    *line_ending,
+                    Some(*reference_had_final_newline),
+                );
+                let encoded =
+                    encode_content(&normalized, &config.encoding).map_err(anyhow::Error::new)?;
+                write_atomic_bytes(dest, &encoded)?;
+                apply_metadata(dest, metadata, config)?;
+                Ok(())
+            }
+            PlannedChangeKind::Delete { path } => {
+                let backup_path = create_backup(path)?;
+                applied.push(AppliedChange::Delete {
+                    original: path.clone(),
+                    backup_path,
+                });
+                Ok(())
+            }
+        };
+
+        match result {
+            Ok(()) => {
+                summary.status = OperationStatus::Applied;
+            }
+            Err(err) => {
+                summary.status = OperationStatus::Failed;
+                summary.message = Some(err.to_string());
+                rollback(applied);
+                return Err(err);
+            }
+        }
+    }
+
+    cleanup_backups(&applied);
+    Ok(())
+}
+
+fn map_anyhow_to_apply_patch_error(err: anyhow::Error) -> ApplyPatchError {
+    match err.downcast::<ApplyPatchError>() {
+        Ok(patch_err) => patch_err,
+        Err(err) => match err.downcast::<std::io::Error>() {
+            Ok(io_err) => {
+                let context = io_err.to_string();
+                ApplyPatchError::IoError(IoError {
+                    context,
+                    source: io_err,
+                })
+            }
+            Err(other) => {
+                let message = other.to_string();
+                ApplyPatchError::IoError(IoError {
+                    context: message.clone(),
+                    source: std::io::Error::other(message),
+                })
+            }
+        },
+    }
+}
+
+fn apply_hunks_with_config(
+    hunks: &[Hunk],
+    config: &ApplyPatchConfig,
+) -> Result<PatchReport, ApplyPatchError> {
+    if hunks.is_empty() {
+        return Err(ApplyPatchError::IoError(IoError {
+            context: "No files were modified.".to_string(),
+            source: std::io::Error::other("No files were modified."),
+        }));
+    }
+
+    let start_time = Instant::now();
+    let (mut summaries, planned) = match plan_hunks(hunks, config) {
+        Ok(value) => value,
+        Err(err) => {
+            let apply_err = map_anyhow_to_apply_patch_error(err);
+            if let Some(conflict) = apply_err.conflict().cloned() {
+                let message = apply_err.to_string();
+                let report = PatchReport {
+                    mode: config.mode,
+                    status: PatchReportStatus::Failed,
+                    duration_ms: 0,
+                    operations: Vec::new(),
+                    options: ReportOptions::from(config),
+                    errors: vec![message.clone()],
+                };
+                return Err(ApplyPatchError::Execution(Box::new(PatchExecutionError {
+                    message,
+                    report,
+                    conflict: Some(conflict),
+                })));
+            } else {
+                return Err(apply_err);
+            }
+        }
+    };
+
+    if matches!(config.mode, PatchReportMode::Apply)
+        && let Err(err) = apply_planned_changes(&planned, &mut summaries, config)
+            .map_err(map_anyhow_to_apply_patch_error)
+    {
+        let duration_ms = start_time.elapsed().as_millis();
+        let message = err.to_string();
+        let report = PatchReport {
+            mode: config.mode,
+            status: PatchReportStatus::Failed,
+            duration_ms,
+            operations: summaries.clone(),
+            options: ReportOptions::from(config),
+            errors: vec![message.clone()],
+        };
+        return Err(ApplyPatchError::Execution(Box::new(PatchExecutionError {
+            message,
+            report,
+            conflict: err.conflict().cloned(),
+        })));
+    }
+
+    let duration_ms = if matches!(config.mode, PatchReportMode::Apply) {
+        start_time.elapsed().as_millis()
+    } else {
+        0
+    };
+
+    let report = PatchReport {
+        mode: config.mode,
+        status: PatchReportStatus::Success,
+        duration_ms,
+        operations: summaries,
+        options: ReportOptions::from(config),
+        errors: Vec::new(),
+    };
+
+    if matches!(report.mode, PatchReportMode::Apply)
+        && matches!(report.status, PatchReportStatus::Success)
+        && let Err(err) = stage_git_changes(&config.root, &report.operations)
+    {
+        eprintln!("Warning: failed to stage changes in git: {err}");
+    }
+
+    Ok(report)
+}
+
+fn stage_git_changes(root: &Path, operations: &[OperationSummary]) -> std::io::Result<()> {
+    let root = match root.canonicalize() {
+        Ok(path) => path,
+        Err(_) => root.to_path_buf(),
+    };
+
+    if !is_git_repository(&root) {
+        return Ok(());
+    }
+
+    let mut paths = HashSet::new();
+    for op in operations {
+        if op.status != OperationStatus::Applied {
+            continue;
+        }
+
+        if let Some(rel) = relative_to_root(&root, &op.path) {
+            paths.insert(rel);
+        }
+        if let Some(target) = op.target_path.as_ref()
+            && let Some(rel) = relative_to_root(&root, target)
+        {
+            paths.insert(rel);
+        }
+    }
+
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let mut sorted_paths: Vec<_> = paths.into_iter().collect();
+    sorted_paths.sort_by(|a, b| a.as_os_str().cmp(b.as_os_str()));
+
+    let mut cmd = Command::new("git");
+    cmd.current_dir(&root);
+    cmd.arg("add").arg("--all").arg("--");
+    for path in &sorted_paths {
+        cmd.arg(path);
+    }
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::piped());
+    let output = cmd.output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(std::io::Error::other(format!("git add failed: {stderr}")))
+    }
+}
+
+fn is_git_repository(root: &Path) -> bool {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(root);
+    cmd.arg("rev-parse").arg("--is-inside-work-tree");
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    cmd.status().map(|status| status.success()).unwrap_or(false)
+}
+
+fn relative_to_root(root: &Path, path: &Path) -> Option<PathBuf> {
+    if path.is_absolute() {
+        path.strip_prefix(root).map(PathBuf::from).ok()
+    } else {
+        Some(path.to_path_buf())
+    }
+}
+
+fn rollback(applied: Vec<AppliedChange>) {
+    for change in applied.into_iter().rev() {
+        match change {
+            AppliedChange::Add { path } => {
+                let _ = fs::remove_file(&path);
+            }
+            AppliedChange::Update {
+                original,
+                dest,
+                backup_path,
+            } => {
+                let _ = fs::remove_file(&dest);
+                let _ = fs::rename(&backup_path, &original);
+            }
+            AppliedChange::Delete {
+                original,
+                backup_path,
+            } => {
+                let _ = fs::rename(&backup_path, &original);
+            }
+        }
+    }
+}
+
+fn cleanup_backups(applied: &[AppliedChange]) {
+    for change in applied {
+        match change {
+            AppliedChange::Update { backup_path, .. }
+            | AppliedChange::Delete { backup_path, .. } => {
+                let _ = fs::remove_file(backup_path);
+            }
+            AppliedChange::Add { .. } => {}
+        }
+    }
+}
+
+fn create_backup(path: &Path) -> anyhow::Result<PathBuf> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut attempt: u32 = 0;
+    loop {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let candidate = parent.join(format!(
+            ".codex_apply_patch_backup_{}_{}_{}",
+            process::id(),
+            timestamp,
+            attempt,
+        ));
+        attempt = attempt.saturating_add(1);
+        if candidate.exists() {
+            continue;
+        }
+        std::fs::rename(path, &candidate).with_context(|| {
+            format!(
+                "Failed to rename {} to {}",
+                path.display(),
+                candidate.display()
+            )
+        })?;
+        return Ok(candidate);
+    }
+}
+
+fn count_lines(content: &str) -> usize {
+    if content.is_empty() {
+        0
+    } else {
+        content.lines().count()
+    }
+}
+
+fn diff_line_counts(old: &str, new: &str) -> (usize, usize) {
+    let diff = TextDiff::from_lines(old, new);
+    let mut added = 0;
+    let mut removed = 0;
+    for change in diff.iter_all_changes() {
+        match change.tag() {
+            ChangeTag::Insert => added += 1,
+            ChangeTag::Delete => removed += 1,
+            _ => {}
+        }
+    }
+    (added, removed)
+}
+
+fn print_operations_summary(
+    label: &str,
+    operations: &[OperationSummary],
+    out: &mut impl std::io::Write,
+) -> std::io::Result<()> {
+    writeln!(out, "{label}:")?;
+    for op in operations {
+        let added = op.lines_added;
+        let removed = op.lines_removed;
+        match op.action {
+            OperationAction::Add => {
+                writeln!(out, "- add: {} (+{})", op.path.display(), added)?;
+            }
+            OperationAction::Update => {
+                writeln!(
+                    out,
+                    "- update: {} (+{}, -{})",
+                    op.path.display(),
+                    added,
+                    removed
+                )?;
+            }
+            OperationAction::Move => {
+                if let Some(target) = op.target_path.as_ref() {
+                    writeln!(
+                        out,
+                        "- move: {} -> {} (+{}, -{})",
+                        op.path.display(),
+                        target.display(),
+                        added,
+                        removed
+                    )?;
+                }
+            }
+            OperationAction::Delete => {
+                writeln!(out, "- delete: {} (-{})", op.path.display(), removed)?;
+            }
+        }
+    }
+    Ok(())
+}
+pub(crate) fn emit_report(
+    stdout: &mut impl std::io::Write,
+    report: &PatchReport,
+) -> std::io::Result<()> {
+    let label = match (report.mode, report.status) {
+        (PatchReportMode::Apply, PatchReportStatus::Success) => "Applied operations",
+        (PatchReportMode::Apply, PatchReportStatus::Failed) => "Attempted operations",
+        (PatchReportMode::DryRun, _) => "Planned operations",
+    };
+    print_operations_summary(label, &report.operations, stdout)?;
+    match report.mode {
+        PatchReportMode::Apply => match report.status {
+            PatchReportStatus::Success => writeln!(stdout, "✔ Patch applied successfully."),
+            PatchReportStatus::Failed => writeln!(stdout, "✘ Patch apply failed."),
+        },
+        PatchReportMode::DryRun => match report.status {
+            PatchReportStatus::Success => {
+                writeln!(stdout, "✔ Dry run successful. No changes applied.")
+            }
+            PatchReportStatus::Failed => writeln!(stdout, "✘ Dry run failed."),
+        },
+    }
+}
+
+pub(crate) fn report_to_json(report: &PatchReport) -> serde_json::Value {
+    let operations = report
+        .operations
+        .iter()
+        .map(|op| {
+            json!({
+                "action": match op.action {
+                    OperationAction::Add => "add",
+                    OperationAction::Update => "update",
+                    OperationAction::Move => "move",
+                    OperationAction::Delete => "delete",
+                },
+                "path": op.path.display().to_string(),
+                "renamed_to": op
+                    .target_path
+                    .as_ref()
+                    .map(|p| p.display().to_string()),
+                "added": op.lines_added,
+                "removed": op.lines_removed,
+                "status": match op.status {
+                    OperationStatus::Planned => "planned",
+                    OperationStatus::Applied => "applied",
+                    OperationStatus::Failed => "failed",
+                },
+                "message": op.message.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "status": match report.status {
+            PatchReportStatus::Success => "success",
+            PatchReportStatus::Failed => "failed",
+        },
+        "mode": match report.mode {
+            PatchReportMode::Apply => "apply",
+            PatchReportMode::DryRun => "dry-run",
+        },
+        "duration_ms": report.duration_ms,
+        "operations": operations,
+        "errors": report.errors,
+        "options": {
+            "encoding": report.options.encoding,
+            "newline": report.options.newline.as_str(),
+            "strip_trailing_whitespace": report.options.strip_trailing_whitespace,
+            "ensure_final_newline": report.options.ensure_final_newline,
+            "preserve_mode": report.options.preserve_mode,
+            "preserve_times": report.options.preserve_times,
+            "new_file_mode": report.options.new_file_mode,
+        },
     })
 }
 
+pub(crate) fn report_to_machine_json(report: &PatchReport) -> serde_json::Value {
+    json!({
+        "schema": APPLY_PATCH_MACHINE_SCHEMA,
+        "report": report_to_json(report),
+    })
+}
+
+/// Return *only* the new file contents (joined into a single `String`) after
+/// applying the chunks to the file at `path`.
 struct AppliedPatch {
     original_contents: String,
     new_contents: String,
 }
 
-/// Return *only* the new file contents (joined into a single `String`) after
-/// applying the chunks to the file at `path`.
 fn derive_new_contents_from_chunks(
     path: &Path,
     chunks: &[UpdateFileChunk],
 ) -> std::result::Result<AppliedPatch, ApplyPatchError> {
-    let original_contents = match std::fs::read_to_string(path) {
-        Ok(contents) => contents,
-        Err(err) => {
-            return Err(ApplyPatchError::IoError(IoError {
-                context: format!("Failed to read file to update {}", path.display()),
-                source: err,
-            }));
-        }
-    };
+    derive_new_contents_from_chunks_with_encoding(path, chunks, "utf-8")
+}
 
+fn derive_new_contents_from_chunks_with_encoding(
+    path: &Path,
+    chunks: &[UpdateFileChunk],
+    encoding: &str,
+) -> std::result::Result<AppliedPatch, ApplyPatchError> {
+    let bytes = fs::read(path).map_err(|err| {
+        ApplyPatchError::IoError(IoError {
+            context: format!("Failed to read file to update {}", path.display()),
+            source: err,
+        })
+    })?;
+    let original_contents = decode_content(&bytes, encoding)?;
+    derive_new_contents_from_original_contents(path, chunks, original_contents)
+}
+
+fn derive_new_contents_from_original_contents(
+    path: &Path,
+    chunks: &[UpdateFileChunk],
+    original_contents: String,
+) -> std::result::Result<AppliedPatch, ApplyPatchError> {
     let mut original_lines: Vec<String> = original_contents.split('\n').map(String::from).collect();
 
-    // Drop the trailing empty element that results from the final newline so
-    // that line counts match the behaviour of standard `diff`.
     if original_lines.last().is_some_and(String::is_empty) {
         original_lines.pop();
     }
 
     let replacements = compute_replacements(&original_lines, path, chunks)?;
-    let new_lines = apply_replacements(original_lines, &replacements);
-    let mut new_lines = new_lines;
+    let mut new_lines = apply_replacements(original_lines, &replacements);
     if !new_lines.last().is_some_and(String::is_empty) {
         new_lines.push(String::new());
     }
 
     let separator = if original_contents.contains("\r\n") {
         "\r\n"
+    } else if original_contents.contains('\r') && !original_contents.contains('\n') {
+        "\r"
     } else {
         "\n"
     };
+
     let new_contents = if new_lines.is_empty() {
         String::new()
     } else {
         new_lines.join(separator)
     };
+
     Ok(AppliedPatch {
         original_contents,
         new_contents,
@@ -831,6 +2204,37 @@ fn derive_new_contents_from_chunks(
 /// Compute a list of replacements needed to transform `original_lines` into the
 /// new lines, given the patch `chunks`. Each replacement is returned as
 /// `(start_index, old_len, new_lines)`.
+fn collect_actual_slice(original_lines: &[String], start: usize, len: usize) -> Vec<String> {
+    original_lines
+        .iter()
+        .skip(start)
+        .take(len)
+        .cloned()
+        .collect()
+}
+
+fn make_diff_hint(expected: &[String], actual: &[String]) -> Vec<String> {
+    if expected.is_empty() && actual.is_empty() {
+        return Vec::new();
+    }
+    let expected_text = expected.join(
+        "
+",
+    );
+    let actual_text = actual.join(
+        "
+",
+    );
+    let diff = TextDiff::from_lines(&actual_text, &expected_text);
+    diff.unified_diff()
+        .context_radius(2)
+        .header("current", "expected")
+        .to_string()
+        .lines()
+        .map(std::string::ToString::to_string)
+        .collect()
+}
+
 fn compute_replacements(
     original_lines: &[String],
     path: &Path,
@@ -851,11 +2255,23 @@ fn compute_replacements(
             ) {
                 line_index = idx + 1;
             } else {
-                return Err(ApplyPatchError::ComputeReplacements(format!(
-                    "Failed to find context '{}' in {}",
-                    ctx_line,
-                    path.display()
-                )));
+                let actual = collect_actual_slice(original_lines, line_index, 1);
+                let expected = vec![ctx_line.clone()];
+                let diff_hint = make_diff_hint(&expected, &actual);
+                let diagnostic = ConflictDiagnostic::new(
+                    format!(
+                        "Failed to find context '{}' in {}",
+                        ctx_line,
+                        path.display()
+                    ),
+                    path.to_path_buf(),
+                    ConflictKind::ContextNotFound,
+                    Some(ctx_line.clone()),
+                    expected,
+                    actual,
+                    diff_hint,
+                );
+                return Err(ApplyPatchError::ComputeReplacements(Box::new(diagnostic)));
             }
         }
 
@@ -908,11 +2324,22 @@ fn compute_replacements(
             replacements.push((start_idx, pattern.len(), new_slice.to_vec()));
             line_index = start_idx + pattern.len();
         } else {
-            return Err(ApplyPatchError::ComputeReplacements(format!(
-                "Failed to find expected lines in {}:\n{}",
-                path.display(),
-                chunk.old_lines.join("\n"),
-            )));
+            let actual = collect_actual_slice(original_lines, line_index, chunk.old_lines.len());
+            let diff_hint = make_diff_hint(&chunk.old_lines, &actual);
+            let diagnostic = ConflictDiagnostic::new(
+                format!(
+                    "Failed to find expected lines in {}:\n{}",
+                    path.display(),
+                    chunk.old_lines.join("\n"),
+                ),
+                path.to_path_buf(),
+                ConflictKind::UnexpectedContent,
+                chunk.change_context.clone(),
+                chunk.old_lines.clone(),
+                actual,
+                diff_hint,
+            );
+            return Err(ApplyPatchError::ComputeReplacements(Box::new(diagnostic)));
         }
     }
 
@@ -980,31 +2407,14 @@ pub fn unified_diff_from_chunks_with_context(
     })
 }
 
-/// Print the summary of changes in git-style format.
-/// Write a summary of changes to the given writer.
-pub fn print_summary(
-    affected: &AffectedPaths,
-    out: &mut impl std::io::Write,
-) -> std::io::Result<()> {
-    writeln!(out, "Success. Updated the following files:")?;
-    for path in &affected.added {
-        writeln!(out, "A {}", path.display())?;
-    }
-    for path in &affected.modified {
-        writeln!(out, "M {}", path.display())?;
-    }
-    for path in &affected.deleted {
-        writeln!(out, "D {}", path.display())?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
     use std::fs;
+    use std::process::Command;
+    use std::process::Stdio;
     use std::string::ToString;
     use tempfile::tempdir;
 
@@ -1032,6 +2442,57 @@ mod tests {
         format!(
             "{prefix}apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: foo\n+hi\n*** End Patch\nPATCH{suffix}"
         )
+    }
+
+    fn init_git(dir: &Path) -> bool {
+        Command::new("git")
+            .arg("init")
+            .current_dir(dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+
+    fn git_add_all(dir: &Path) -> bool {
+        Command::new("git")
+            .args(["add", "--all"])
+            .current_dir(dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+
+    fn git_commit_all(dir: &Path, message: &str) -> bool {
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg(message)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "Codex")
+            .env("GIT_AUTHOR_EMAIL", "codex@example.com")
+            .env("GIT_COMMITTER_NAME", "Codex")
+            .env("GIT_COMMITTER_EMAIL", "codex@example.com")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+
+    fn git_status(dir: &Path) -> Option<String> {
+        let output = Command::new("git")
+            .args(["status", "--short"])
+            .current_dir(dir)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
     fn expected_single_add() -> Vec<Hunk> {
@@ -1171,8 +2632,8 @@ PATCH"#,
     }
 
     #[test]
-    fn test_cd_with_semicolon_is_ignored() {
-        assert_not_match(&heredoc_script("cd foo; "));
+    fn test_cd_with_semicolon_matches() {
+        assert_match(&heredoc_script("cd foo; "), Some("foo"));
     }
 
     #[test]
@@ -1196,6 +2657,24 @@ PATCH"#,
     }
 
     #[test]
+    fn test_set_and_cd_inline_allowed() {
+        assert_match(
+            &heredoc_script("set -euo pipefail && cd repo && "),
+            Some("repo"),
+        );
+    }
+
+    #[test]
+    fn test_cd_on_previous_line_matches() {
+        assert_match(&heredoc_script("cd foo\n"), Some("foo"));
+    }
+
+    #[test]
+    fn test_set_e_prefix_is_allowed() {
+        assert_match(&heredoc_script("set -e\n"), None);
+    }
+
+    #[test]
     fn test_echo_and_apply_patch_is_ignored() {
         assert_not_match(&heredoc_script("echo foo && "));
     }
@@ -1207,8 +2686,8 @@ PATCH"#,
     }
 
     #[test]
-    fn test_double_cd_then_apply_patch_is_ignored() {
-        assert_not_match(&heredoc_script("cd foo && cd bar && "));
+    fn test_double_cd_then_apply_patch_uses_last_path() {
+        assert_match(&heredoc_script("cd foo && cd bar && "), Some("bar"));
     }
 
     #[test]
@@ -1245,7 +2724,7 @@ PATCH"#,
         let stdout_str = String::from_utf8(stdout).unwrap();
         let stderr_str = String::from_utf8(stderr).unwrap();
         let expected_out = format!(
-            "Success. Updated the following files:\nA {}\n",
+            "Applied operations:\n- add: {} (+2)\n✔ Patch applied successfully.\n",
             path.display()
         );
         assert_eq!(stdout_str, expected_out);
@@ -1266,7 +2745,7 @@ PATCH"#,
         let stdout_str = String::from_utf8(stdout).unwrap();
         let stderr_str = String::from_utf8(stderr).unwrap();
         let expected_out = format!(
-            "Success. Updated the following files:\nD {}\n",
+            "Applied operations:\n- delete: {} (-1)\n✔ Patch applied successfully.\n",
             path.display()
         );
         assert_eq!(stdout_str, expected_out);
@@ -1294,7 +2773,8 @@ PATCH"#,
         let stdout_str = String::from_utf8(stdout).unwrap();
         let stderr_str = String::from_utf8(stderr).unwrap();
         let expected_out = format!(
-            "Success. Updated the following files:\nM {}\n",
+            "Applied operations:
+- update: {} (+1, -1)\n✔ Patch applied successfully.\n",
             path.display()
         );
         assert_eq!(stdout_str, expected_out);
@@ -1325,7 +2805,8 @@ PATCH"#,
         let stdout_str = String::from_utf8(stdout).unwrap();
         let stderr_str = String::from_utf8(stderr).unwrap();
         let expected_out = format!(
-            "Success. Updated the following files:\nM {}\n",
+            "Applied operations:\n- move: {} -> {} (+1, -1)\n✔ Patch applied successfully.\n",
+            src.display(),
             dest.display()
         );
         assert_eq!(stdout_str, expected_out);
@@ -1364,13 +2845,87 @@ PATCH"#,
         let stdout_str = String::from_utf8(stdout).unwrap();
         let stderr_str = String::from_utf8(stderr).unwrap();
         let expected_out = format!(
-            "Success. Updated the following files:\nM {}\n",
+            "Applied operations:\n- update: {} (+2, -2)\n✔ Patch applied successfully.\n",
             path.display()
         );
         assert_eq!(stdout_str, expected_out);
         assert_eq!(stderr_str, "");
         let contents = fs::read_to_string(&path).unwrap();
         assert_eq!(contents, "foo\nBAR\nbaz\nQUX\n");
+    }
+
+    #[test]
+    fn test_apply_patch_multiple_file_operations_summary() {
+        let dir = tempdir().unwrap();
+        let update_path = dir.path().join("keep.txt");
+        let add_path = dir.path().join("added.txt");
+        let delete_path = dir.path().join("remove.txt");
+        fs::write(
+            &update_path,
+            "stay
+old
+",
+        )
+        .unwrap();
+        fs::write(
+            &delete_path,
+            "gone
+",
+        )
+        .unwrap();
+
+        let hunks = vec![
+            Hunk::UpdateFile {
+                path: update_path.clone(),
+                move_path: None,
+                chunks: vec![UpdateFileChunk {
+                    change_context: None,
+                    old_lines: vec!["old".to_string()],
+                    new_lines: vec!["new".to_string()],
+                    is_end_of_file: false,
+                }],
+            },
+            Hunk::AddFile {
+                path: add_path.clone(),
+                contents: "created
+"
+                .to_string(),
+            },
+            Hunk::DeleteFile {
+                path: delete_path.clone(),
+            },
+        ];
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        apply_hunks(&hunks, &mut stdout, &mut stderr).unwrap();
+
+        let stdout_str = String::from_utf8(stdout).unwrap();
+        let expected = format!(
+            "Applied operations:
+- update: {} (+1, -1)
+- add: {} (+1)
+- delete: {} (-1)
+✔ Patch applied successfully.
+",
+            update_path.display(),
+            add_path.display(),
+            delete_path.display()
+        );
+        assert_eq!(stdout_str, expected);
+        assert_eq!(String::from_utf8(stderr).unwrap(), "");
+        assert_eq!(
+            fs::read_to_string(&update_path).unwrap(),
+            "stay
+new
+"
+        );
+        assert_eq!(
+            fs::read_to_string(&add_path).unwrap(),
+            "created
+"
+        );
+        assert!(!delete_path.exists());
     }
 
     /// A more involved `Update File` hunk that exercises additions, deletions and
@@ -1415,7 +2970,7 @@ PATCH"#,
         let stderr_str = String::from_utf8(stderr).unwrap();
 
         let expected_out = format!(
-            "Success. Updated the following files:\nM {}\n",
+            "Applied operations:\n- update: {} (+3, -2)\n✔ Patch applied successfully.\n",
             path.display()
         );
         assert_eq!(stdout_str, expected_out);
@@ -1449,6 +3004,137 @@ PATCH"#,
         assert_eq!(
             contents,
             "line1\nline2-replacement\nafter-context\nsecond-line\n"
+        );
+    }
+
+    #[test]
+    fn test_git_staging_after_apply() {
+        let repo = tempdir().unwrap();
+        if !init_git(repo.path()) {
+            eprintln!("git not available, skipping staging test");
+            return;
+        }
+
+        let patch = wrap_patch(
+            "*** Add File: foo.txt
++hello",
+        );
+
+        let config = ApplyPatchConfig {
+            root: repo.path().to_path_buf(),
+            ..ApplyPatchConfig::default()
+        };
+        apply_patch_with_config(&patch, &config).expect("apply_patch_with_config");
+
+        let summary = git_status(repo.path()).expect("git status");
+        assert!(
+            summary.contains("A  foo.txt"),
+            "expected staged addition, git status: {summary:?}"
+        );
+    }
+
+    #[test]
+    fn test_git_staging_after_update() {
+        let repo = tempdir().unwrap();
+        if !init_git(repo.path()) {
+            eprintln!("git not available, skipping staging test");
+            return;
+        }
+
+        let path = repo.path().join("foo.txt");
+        fs::write(&path, "hello\n").unwrap();
+        assert!(git_add_all(repo.path()));
+        assert!(git_commit_all(repo.path(), "init file"));
+
+        let patch = wrap_patch(&format!(
+            r#"*** Update File: {}
+@@
+-hello
++world"#,
+            path.display()
+        ));
+
+        let config = ApplyPatchConfig {
+            root: repo.path().to_path_buf(),
+            ..ApplyPatchConfig::default()
+        };
+        apply_patch_with_config(&patch, &config).expect("apply_patch_with_config");
+
+        let summary = git_status(repo.path()).expect("git status");
+        assert!(
+            summary.contains("M  foo.txt"),
+            "expected staged modification, git status: {summary:?}"
+        );
+    }
+
+    #[test]
+    fn test_git_staging_after_delete() {
+        let repo = tempdir().unwrap();
+        if !init_git(repo.path()) {
+            eprintln!("git not available, skipping staging test");
+            return;
+        }
+
+        let path = repo.path().join("foo.txt");
+        fs::write(&path, "hello\n").unwrap();
+        assert!(git_add_all(repo.path()));
+        assert!(git_commit_all(repo.path(), "init file"));
+
+        let patch = wrap_patch(&format!("*** Delete File: {}", path.display()));
+
+        let config = ApplyPatchConfig {
+            root: repo.path().to_path_buf(),
+            ..ApplyPatchConfig::default()
+        };
+        apply_patch_with_config(&patch, &config).expect("apply_patch_with_config");
+
+        let summary = git_status(repo.path()).expect("git status");
+        assert!(
+            summary.contains("D  foo.txt"),
+            "expected staged deletion, git status: {summary:?}"
+        );
+    }
+
+    #[test]
+    fn test_git_staging_after_move() {
+        let repo = tempdir().unwrap();
+        if !init_git(repo.path()) {
+            eprintln!("git not available, skipping staging test");
+            return;
+        }
+
+        let src = repo.path().join("src.txt");
+        fs::write(&src, "hello\n").unwrap();
+        assert!(git_add_all(repo.path()));
+        assert!(git_commit_all(repo.path(), "init file"));
+
+        let dest = repo.path().join("dst.txt");
+        let patch = wrap_patch(&format!(
+            r#"*** Update File: {}
+*** Move to: {}
+@@
+-hello
++world"#,
+            src.display(),
+            dest.display()
+        ));
+
+        let config = ApplyPatchConfig {
+            root: repo.path().to_path_buf(),
+            ..ApplyPatchConfig::default()
+        };
+        apply_patch_with_config(&patch, &config).expect("apply_patch_with_config");
+
+        let summary = git_status(repo.path()).expect("git status");
+        let lines: Vec<&str> = summary.lines().collect();
+        let rename_staged = lines
+            .iter()
+            .any(|line| line.trim().starts_with("R  ") && line.contains("src.txt -> dst.txt"));
+        let add_delete_pair = lines.iter().any(|line| line.contains("A  dst.txt"))
+            && lines.iter().any(|line| line.contains("D  src.txt"));
+        assert!(
+            rename_staged || add_delete_pair,
+            "expected staged rename, git status: {summary:?}"
         );
     }
 
@@ -1488,7 +3174,7 @@ PATCH"#,
         // Ensure success summary lists the file as modified.
         let stdout_str = String::from_utf8(stdout).unwrap();
         let expected_out = format!(
-            "Success. Updated the following files:\nM {}\n",
+            "Applied operations:\n- update: {} (+1, -1)\n✔ Patch applied successfully.\n",
             path.display()
         );
         assert_eq!(stdout_str, expected_out);

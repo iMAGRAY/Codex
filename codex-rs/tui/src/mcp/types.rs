@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
@@ -115,8 +113,10 @@ pub(crate) struct HealthDraft {
 #[allow(dead_code)]
 impl McpWizardDraft {
     pub(crate) fn from_existing(name: String, cfg: &McpServerConfig) -> Self {
-        let mut draft = Self::default();
-        draft.name = name;
+        let mut draft = Self {
+            name,
+            ..Self::default()
+        };
         draft.populate_from_config(cfg);
         draft
     }
@@ -200,10 +200,10 @@ impl McpWizardDraft {
                 if self.http.url.trim().is_empty() {
                     bail!("URL must not be empty");
                 }
-                if let Some(var) = &self.http.bearer_token_env_var {
-                    if var.trim().is_empty() {
-                        bail!("Bearer token environment variable must not be blank");
-                    }
+                if let Some(var) = &self.http.bearer_token_env_var
+                    && var.trim().is_empty()
+                {
+                    bail!("Bearer token environment variable must not be blank");
                 }
             }
         }
@@ -500,13 +500,15 @@ impl McpServerSnapshot {
     }
 
     pub(crate) fn to_config(&self) -> McpServerConfig {
-        let mut cfg = McpServerConfig::default();
-        cfg.template_id = self.template_id.clone();
-        cfg.display_name = self.display_name.clone();
-        cfg.category = self.category.clone();
-        cfg.description = self.description.clone();
-        cfg.tags = self.tags.clone();
-        cfg.metadata = self.metadata.clone();
+        let mut cfg = McpServerConfig {
+            template_id: self.template_id.clone(),
+            display_name: self.display_name.clone(),
+            category: self.category.clone(),
+            description: self.description.clone(),
+            tags: self.tags.clone(),
+            metadata: self.metadata.clone(),
+            ..McpServerConfig::default()
+        };
         cfg.set_startup_timeout_ms(self.startup_timeout_ms);
         cfg.set_tool_timeout_ms(self.tool_timeout_ms);
 

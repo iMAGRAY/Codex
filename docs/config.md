@@ -164,6 +164,20 @@ If you want to be notified whenever a command fails, use "on-failure":
 approval_policy = "on-failure"
 ```
 
+## features
+
+Enable or disable optional Codex capabilities.
+
+### features.unified_exec
+
+```toml
+[features]
+unified_exec = true
+```
+
+Controls the unified exec tool, which lets Codex keep long-lived background processes (such as the improved `apply_patch` flow) alive across tool calls. When enabled (the default), Codex persists command output to an on-disk spool so you can page through the full log, export it, or rehydrate any slice. The TUI exposes a process manager overlay with live status badges, Alt+PgUp/PgDn navigation for deep history, on-demand log export, and inline stdin prompts. Set this flag to `false` to fall back to the legacy one-shot exec behavior.
+
+
 If you want the model to run until it decides that it needs to ask you for escalated permissions, use "on-request":
 
 ```toml

@@ -226,7 +226,7 @@ pub struct Config {
     pub use_experimental_streamable_shell_tool: bool,
 
     /// If set to `true`, used only the experimental unified exec tool.
-    pub use_experimental_unified_exec_tool: bool,
+    pub use_unified_exec_tool: bool,
 
     /// If set to `true`, use the experimental official Rust MCP client.
     /// https://github.com/modelcontextprotocol/rust-sdk
@@ -356,7 +356,7 @@ pub fn load_global_mcp_servers_blocking(
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+                .map_err(std::io::Error::other)?;
             runtime.block_on(load_global_mcp_servers_inner(codex_home))
         }
     }
@@ -958,7 +958,8 @@ pub struct ConfigToml {
     /// Legacy, now use features
     pub experimental_instructions_file: Option<PathBuf>,
     pub experimental_use_exec_command_tool: Option<bool>,
-    pub experimental_use_unified_exec_tool: Option<bool>,
+    #[serde(alias = "experimental_use_unified_exec_tool")]
+    pub use_unified_exec_tool: Option<bool>,
     pub experimental_use_rmcp_client: Option<bool>,
     pub experimental_use_freeform_apply_patch: Option<bool>,
 
@@ -1237,7 +1238,7 @@ impl Config {
         let include_view_image_tool_flag = features.enabled(Feature::ViewImageTool);
         let tools_web_search_request = features.enabled(Feature::WebSearchRequest);
         let use_experimental_streamable_shell_tool = features.enabled(Feature::StreamableShell);
-        let use_experimental_unified_exec_tool = features.enabled(Feature::UnifiedExec);
+        let use_unified_exec_tool = features.enabled(Feature::UnifiedExec);
         let use_experimental_use_rmcp_client = features.enabled(Feature::RmcpClient);
 
         let experimental_mcp_overhaul = cfg
@@ -1359,7 +1360,7 @@ impl Config {
             include_apply_patch_tool: include_apply_patch_tool_flag,
             tools_web_search_request,
             use_experimental_streamable_shell_tool,
-            use_experimental_unified_exec_tool,
+            use_unified_exec_tool,
             use_experimental_use_rmcp_client,
             include_view_image_tool: include_view_image_tool_flag,
             features,
@@ -1685,7 +1686,7 @@ exclude_slash_tmp = true
         let codex_home = TempDir::new()?;
         let cfg = ConfigToml {
             experimental_use_exec_command_tool: Some(true),
-            experimental_use_unified_exec_tool: Some(true),
+            use_unified_exec_tool: Some(true),
             experimental_use_rmcp_client: Some(true),
             experimental_use_freeform_apply_patch: Some(true),
             ..Default::default()
@@ -1704,7 +1705,7 @@ exclude_slash_tmp = true
 
         assert!(config.include_apply_patch_tool);
         assert!(config.use_experimental_streamable_shell_tool);
-        assert!(config.use_experimental_unified_exec_tool);
+        assert!(config.use_unified_exec_tool);
         assert!(config.use_experimental_use_rmcp_client);
 
         Ok(())
@@ -2412,7 +2413,7 @@ model_verbosity = "high"
                 include_apply_patch_tool: false,
                 tools_web_search_request: false,
                 use_experimental_streamable_shell_tool: false,
-                use_experimental_unified_exec_tool: false,
+                use_unified_exec_tool: true,
                 use_experimental_use_rmcp_client: false,
                 include_view_image_tool: true,
                 features: Features::with_defaults(),
@@ -2479,7 +2480,7 @@ model_verbosity = "high"
             include_apply_patch_tool: false,
             tools_web_search_request: false,
             use_experimental_streamable_shell_tool: false,
-            use_experimental_unified_exec_tool: false,
+            use_unified_exec_tool: true,
             use_experimental_use_rmcp_client: false,
             include_view_image_tool: true,
             features: Features::with_defaults(),
@@ -2561,7 +2562,7 @@ model_verbosity = "high"
             include_apply_patch_tool: false,
             tools_web_search_request: false,
             use_experimental_streamable_shell_tool: false,
-            use_experimental_unified_exec_tool: false,
+            use_unified_exec_tool: true,
             use_experimental_use_rmcp_client: false,
             include_view_image_tool: true,
             features: Features::with_defaults(),
@@ -2629,7 +2630,7 @@ model_verbosity = "high"
             include_apply_patch_tool: false,
             tools_web_search_request: false,
             use_experimental_streamable_shell_tool: false,
-            use_experimental_unified_exec_tool: false,
+            use_unified_exec_tool: true,
             use_experimental_use_rmcp_client: false,
             include_view_image_tool: true,
             features: Features::with_defaults(),

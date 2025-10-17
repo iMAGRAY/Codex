@@ -94,6 +94,7 @@ use crate::protocol::Submission;
 use crate::protocol::TokenCountEvent;
 use crate::protocol::TokenUsage;
 use crate::protocol::TurnDiffEvent;
+use crate::protocol::UnifiedExecSessionsEvent;
 use crate::protocol::WebSearchBeginEvent;
 use crate::rollout::RolloutRecorder;
 use crate::rollout::RolloutRecorderParams;
@@ -109,7 +110,11 @@ use crate::tools::context::SharedTurnDiffTracker;
 use crate::tools::format_exec_output_str;
 use crate::tools::parallel::ToolCallRuntime;
 use crate::turn_diff_tracker::TurnDiffTracker;
+use crate::unified_exec::UnifiedExecError;
+use crate::unified_exec::UnifiedExecOutputWindow;
 use crate::unified_exec::UnifiedExecSessionManager;
+use crate::unified_exec::UnifiedExecSessionOutput;
+use crate::unified_exec::UnifiedExecSessionSnapshot;
 use crate::user_instructions::UserInstructions;
 use crate::user_notification::UserNotification;
 use crate::util::backoff;
@@ -133,6 +138,7 @@ pub struct Codex {
     next_id: AtomicU64,
     tx_sub: Sender<Submission>,
     rx_event: Receiver<Event>,
+    session: Arc<Session>,
 }
 
 /// Wrapper returned by [`Codex::spawn`] containing the spawned [`Codex`],
@@ -191,11 +197,13 @@ impl Codex {
         let conversation_id = session.conversation_id;
 
         // This task will run until Op::Shutdown is received.
-        tokio::spawn(submission_loop(session, turn_context, config, rx_sub));
+        let session_clone = Arc::clone(&session);
+        tokio::spawn(submission_loop(session_clone, turn_context, config, rx_sub));
         let codex = Codex {
             next_id: AtomicU64::new(0),
             tx_sub,
             rx_event,
+            session,
         };
 
         Ok(CodexSpawnOk {
@@ -232,6 +240,54 @@ impl Codex {
             .await
             .map_err(|_| CodexErr::InternalAgentDied)?;
         Ok(event)
+    }
+
+    pub(crate) async fn run_unified_exec_request(
+        &self,
+        request: crate::unified_exec::UnifiedExecRequest<'_>,
+    ) -> Result<crate::unified_exec::UnifiedExecResult, crate::unified_exec::UnifiedExecError> {
+        self.session.run_unified_exec_request(request).await
+    }
+
+    pub(crate) async fn unified_exec_snapshot(&self) -> Vec<UnifiedExecSessionSnapshot> {
+        self.session.unified_exec_snapshot().await
+    }
+
+    pub(crate) async fn publish_unified_exec_sessions(&self, sub_id: &str) {
+        self.session.publish_unified_exec_sessions(sub_id).await;
+    }
+
+    pub(crate) async fn kill_unified_exec_session(&self, session_id: i32) -> bool {
+        self.session.kill_unified_exec_session(session_id).await
+    }
+
+    pub(crate) async fn remove_unified_exec_session(&self, session_id: i32) -> bool {
+        self.session.remove_unified_exec_session(session_id).await
+    }
+
+    pub(crate) async fn unified_exec_output(
+        &self,
+        session_id: i32,
+    ) -> Option<UnifiedExecSessionOutput> {
+        self.session.session_output(session_id).await
+    }
+
+    pub(crate) async fn unified_exec_output_window(
+        &self,
+        session_id: i32,
+        window: UnifiedExecOutputWindow,
+    ) -> Option<UnifiedExecSessionOutput> {
+        self.session.session_output_window(session_id, window).await
+    }
+
+    pub(crate) async fn export_unified_exec_log<P: AsRef<std::path::Path>>(
+        &self,
+        session_id: i32,
+        destination: P,
+    ) -> Result<(), UnifiedExecError> {
+        self.session
+            .export_session_log(session_id, destination)
+            .await
     }
 }
 
@@ -1109,6 +1165,67 @@ impl Session {
         self.services
             .unified_exec_manager
             .handle_request(request)
+            .await
+    }
+
+    pub(crate) async fn unified_exec_snapshot(&self) -> Vec<UnifiedExecSessionSnapshot> {
+        self.services.unified_exec_manager.snapshot().await
+    }
+
+    pub(crate) async fn publish_unified_exec_sessions(&self, sub_id: &str) {
+        let sessions = self
+            .services
+            .unified_exec_manager
+            .snapshot()
+            .await
+            .into_iter()
+            .map(UnifiedExecSessionSnapshot::into)
+            .collect::<Vec<_>>();
+        let event = Event {
+            id: sub_id.to_string(),
+            msg: EventMsg::UnifiedExecSessions(UnifiedExecSessionsEvent { sessions }),
+        };
+        self.send_event(event).await;
+    }
+
+    pub(crate) async fn kill_unified_exec_session(&self, session_id: i32) -> bool {
+        self.services
+            .unified_exec_manager
+            .kill_session(session_id)
+            .await
+    }
+
+    pub(crate) async fn remove_unified_exec_session(&self, session_id: i32) -> bool {
+        self.services
+            .unified_exec_manager
+            .remove_session(session_id)
+            .await
+    }
+
+    pub(crate) async fn session_output(&self, session_id: i32) -> Option<UnifiedExecSessionOutput> {
+        self.session_output_window(session_id, UnifiedExecOutputWindow::tail_default())
+            .await
+    }
+
+    pub(crate) async fn session_output_window(
+        &self,
+        session_id: i32,
+        window: UnifiedExecOutputWindow,
+    ) -> Option<UnifiedExecSessionOutput> {
+        self.services
+            .unified_exec_manager
+            .session_output_window(session_id, window)
+            .await
+    }
+
+    pub(crate) async fn export_session_log<P: AsRef<std::path::Path>>(
+        &self,
+        session_id: i32,
+        destination: P,
+    ) -> Result<(), UnifiedExecError> {
+        self.services
+            .unified_exec_manager
+            .export_session_log(session_id, destination)
             .await
     }
 

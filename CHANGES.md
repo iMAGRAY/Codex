@@ -2,6 +2,7 @@
 
 ## Highlights
 - Added a fully interactive MCP manager + wizard to the TUI, covering the user-facing pieces of RFC “MCP Management Overhaul” Section 6 (Unified UX). Manager views surface templates/servers with health placeholders, and wizard flows provide multi-step validation with snapshot coverage.
+- Promoted the unified exec tool to a default-on feature, documenting `[features].unified_exec` and shipping a TUI process manager overlay so users can inspect background sessions, send input, export full logs, or terminate them without leaving the chat. Unified exec now streams every byte into a durable spool so long-running commands are navigable well beyond the previous 128 KiB in-memory cap.
 - Extended the CLI with a production-ready `codex mcp wizard`, supporting both interactive and non-interactive usage, JSON summaries, and direct persistence. This aligns the CLI experience with the TUI (RFC Section 6.7) while remaining fully scriptable.
 - Hardened the registry layer (RFC Section 7.3) so MCP server rename/update operations are atomic and cannot lose existing configurations even if persistence fails mid-flight.
 - Enhanced Seatbelt sandbox symlink support by introducing `SeatbeltPathExpr` and SBPL string escaping so lexical symlink paths are whitelisted alongside canonical ones, eliminating duplicate `-D` arguments while preserving security.
@@ -10,6 +11,7 @@
 
 ## Details
 - Introduced `tui/src/mcp/` modules (`types`, `manager_view`, `wizard_view`) with unit and snapshot tests (`mcp_manager_*`, `mcp_wizard_*`) to verify layout and interactions.
+- Added unified exec session snapshots + `UnifiedExecSessions` events so both CLI and TUI ingest richer metadata (command, timestamps, previews). Implemented `ProcessManagerView` with status columns, preview metadata, windowed log browsing (Alt+PgUp/PgDn), one-keystroke exports, and unit tests covering rendering, navigation, and event wiring.
 - Wired new `AppEvent` variants and handlers in `tui/src/app.rs` and `chatwidget.rs`, enabling live config edits (create, edit, delete, reload) and feature-flag based fallbacks.
 - Added `core/src/mcp/health.rs` and expanded `McpRegistry` (upsert/remove/load, health stubs, validation). Added regression tests ensuring rename safety.
 - Implemented CLI wizard helpers under `cli/src/mcp/` with shared argument parsing, English-language prompts, validation, and JSON rendering; integrated with existing CLI command surface.
@@ -19,6 +21,8 @@
 
 ## Testing
 - `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test -p codex-core unified_exec_emits_session_snapshots`
+- `cargo test -p codex-tui process_manager`
 - `cargo test --all-features`
 - `cargo test -p codex-tui`
 - `cargo test -p codex-cli`

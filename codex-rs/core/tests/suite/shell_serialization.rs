@@ -9,6 +9,7 @@ use codex_core::protocol::InputItem;
 use codex_core::protocol::Op;
 use codex_core::protocol::SandboxPolicy;
 use codex_protocol::config_types::ReasoningSummary;
+use core_test_support::assert_exec_summary;
 use core_test_support::assert_regex_match;
 use core_test_support::responses::ev_apply_patch_function_call;
 use core_test_support::responses::ev_assistant_message;
@@ -431,15 +432,15 @@ async fn apply_patch_custom_tool_output_is_structured() -> Result<()> {
         .and_then(Value::as_str)
         .expect("apply_patch output string");
 
-    let expected_pattern = format!(
+    assert_regex_match(
         r"(?s)^Exit code: 0
 Wall time: [0-9]+(?:\.[0-9]+)? seconds
 Output:
-Success. Updated the following files:
-A {file_name}
-?$"
+",
+        output,
     );
-    assert_regex_match(&expected_pattern, output);
+    let expected_ops = vec![format!("- add: {file_name} (+1)")];
+    assert_exec_summary(output, &expected_ops);
 
     Ok(())
 }
@@ -491,15 +492,15 @@ async fn apply_patch_custom_tool_call_creates_file() -> Result<()> {
         .and_then(Value::as_str)
         .expect("apply_patch output string");
 
-    let expected_pattern = format!(
+    assert_regex_match(
         r"(?s)^Exit code: 0
 Wall time: [0-9]+(?:\.[0-9]+)? seconds
 Output:
-Success. Updated the following files:
-A {file_name}
-?$"
+",
+        output,
     );
-    assert_regex_match(&expected_pattern, output);
+    let expected_ops = vec![format!("- add: {file_name} (+1)")];
+    assert_exec_summary(output, &expected_ops);
 
     let new_file_path = test.cwd.path().join(file_name);
     let created_contents = fs::read_to_string(&new_file_path)?;
@@ -560,15 +561,15 @@ async fn apply_patch_custom_tool_call_updates_existing_file() -> Result<()> {
         .and_then(Value::as_str)
         .expect("apply_patch output string");
 
-    let expected_pattern = format!(
+    assert_regex_match(
         r"(?s)^Exit code: 0
 Wall time: [0-9]+(?:\.[0-9]+)? seconds
 Output:
-Success. Updated the following files:
-M {file_name}
-?$"
+",
+        output,
     );
-    assert_regex_match(&expected_pattern, output);
+    let expected_ops = vec![format!("- update: {file_name} (+1, -1)")];
+    assert_exec_summary(output, &expected_ops);
 
     let updated_contents = fs::read_to_string(file_path)?;
     assert_eq!(updated_contents, "after\n", "expected updated file content");
@@ -678,15 +679,15 @@ async fn apply_patch_function_call_output_is_structured() -> Result<()> {
         .and_then(Value::as_str)
         .expect("apply_patch output string");
 
-    let expected_pattern = format!(
+    assert_regex_match(
         r"(?s)^Exit code: 0
 Wall time: [0-9]+(?:\.[0-9]+)? seconds
 Output:
-Success. Updated the following files:
-A {file_name}
-?$"
+",
+        output,
     );
-    assert_regex_match(&expected_pattern, output);
+    let expected_ops = vec![format!("- add: {file_name} (+1)")];
+    assert_exec_summary(output, &expected_ops);
 
     Ok(())
 }

@@ -145,7 +145,7 @@ impl Features {
         let base_legacy = LegacyFeatureToggles {
             experimental_use_freeform_apply_patch: cfg.experimental_use_freeform_apply_patch,
             experimental_use_exec_command_tool: cfg.experimental_use_exec_command_tool,
-            experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
+            use_unified_exec_tool: cfg.use_unified_exec_tool,
             experimental_use_rmcp_client: cfg.experimental_use_rmcp_client,
             tools_web_search: cfg.tools.as_ref().and_then(|t| t.web_search),
             tools_view_image: cfg.tools.as_ref().and_then(|t| t.view_image),
@@ -164,10 +164,11 @@ impl Features {
             experimental_use_freeform_apply_patch: config_profile
                 .experimental_use_freeform_apply_patch,
             experimental_use_exec_command_tool: config_profile.experimental_use_exec_command_tool,
-            experimental_use_unified_exec_tool: config_profile.experimental_use_unified_exec_tool,
+            use_unified_exec_tool: config_profile.use_unified_exec_tool,
             experimental_use_rmcp_client: config_profile.experimental_use_rmcp_client,
             tools_web_search: config_profile.tools_web_search,
             tools_view_image: config_profile.tools_view_image,
+            ..Default::default()
         };
         profile_legacy.apply(&mut features);
         if let Some(profile_features) = config_profile.features.as_ref() {
@@ -210,8 +211,8 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::UnifiedExec,
         key: "unified_exec",
-        stage: Stage::Experimental,
-        default_enabled: false,
+        stage: Stage::Stable,
+        default_enabled: true,
     },
     FeatureSpec {
         id: Feature::StreamableShell,

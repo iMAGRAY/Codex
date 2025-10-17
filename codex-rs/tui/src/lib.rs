@@ -57,6 +57,7 @@ mod markdown_stream;
 pub mod mcp;
 pub mod onboarding;
 mod pager_overlay;
+mod process_manager;
 pub mod public_widgets;
 mod render;
 mod resume_picker;

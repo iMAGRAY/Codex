@@ -283,6 +283,7 @@ async fn run_codex_tool_session_inner(
                     | EventMsg::UserMessage(_)
                     | EventMsg::ShutdownComplete
                     | EventMsg::ViewImageToolCall(_)
+                    | EventMsg::UnifiedExecSessions(_)
                     | EventMsg::EnteredReviewMode(_)
                     | EventMsg::ExitedReviewMode(_) => {
                         // For now, we do not do anything extra for these

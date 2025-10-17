@@ -93,11 +93,16 @@ impl Default for McpServerConfig {
     }
 }
 
+/// Borrowed view of the stdio transport configuration triple (command, args, env).
+pub type McpStdioDetails<'a> = (
+    &'a String,
+    &'a Vec<String>,
+    Option<&'a HashMap<String, String>>,
+);
+
 impl McpServerConfig {
     /// Return stdio transport details (command, args, env) if configured.
-    pub fn stdio_details(
-        &self,
-    ) -> Option<(&String, &Vec<String>, Option<&HashMap<String, String>>)> {
+    pub fn stdio_details(&self) -> Option<McpStdioDetails<'_>> {
         match &self.transport {
             McpServerTransportConfig::Stdio { command, args, env } => {
                 Some((command, args, env.as_ref()))

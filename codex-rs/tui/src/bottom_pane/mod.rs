@@ -41,6 +41,16 @@ pub(crate) enum CancellationEvent {
     NotHandled,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ProcessOverview {
+    pub header: String,
+    pub running_details: Vec<String>,
+    pub running_more: usize,
+    pub completed_details: Vec<String>,
+    pub completed_more: usize,
+    pub footer_summary: Option<String>,
+}
+
 pub(crate) use chat_composer::ChatComposer;
 pub(crate) use chat_composer::InputResult;
 use codex_protocol::custom_prompts::CustomPrompt;
@@ -68,6 +78,8 @@ pub(crate) struct BottomPane {
 
     /// Inline status indicator shown above the composer while a task is running.
     status: Option<StatusIndicatorWidget>,
+    /// Summary badge showing background process state (rendered above composer).
+    process_overview: Option<ProcessOverview>,
     /// Queued user messages to show under the status indicator.
     queued_user_messages: Vec<String>,
     context_window_percent: Option<u8>,
@@ -101,6 +113,7 @@ impl BottomPane {
             is_task_running: false,
             ctrl_c_quit_hint: false,
             status: None,
+            process_overview: None,
             queued_user_messages: Vec::new(),
             esc_backtrack_hint: false,
             context_window_percent: None,
@@ -113,6 +126,10 @@ impl BottomPane {
 
     fn active_view(&self) -> Option<&dyn BottomPaneView> {
         self.view_stack.last().map(std::convert::AsRef::as_ref)
+    }
+
+    pub(crate) fn active_view_mut(&mut self) -> Option<&mut dyn BottomPaneView> {
+        self.view_stack.last_mut().map(std::convert::AsMut::as_mut)
     }
 
     fn push_view(&mut self, view: Box<dyn BottomPaneView>) {
@@ -392,6 +409,17 @@ impl BottomPane {
         self.request_redraw();
     }
 
+    pub(crate) fn set_process_overview(&mut self, overview: Option<ProcessOverview>) {
+        if self.process_overview != overview {
+            let summary = overview
+                .as_ref()
+                .and_then(|overview| overview.footer_summary.clone());
+            self.process_overview = overview;
+            self.composer.set_process_overview_summary(summary);
+            self.request_redraw();
+        }
+    }
+
     pub(crate) fn composer_is_empty(&self) -> bool {
         self.composer.is_empty()
     }
@@ -523,7 +551,6 @@ impl WidgetRef for &BottomPane {
                 status.render_ref(status_area, buf);
             }
 
-            // Render the composer in the remaining area.
             self.composer.render_ref(content, buf);
         }
     }

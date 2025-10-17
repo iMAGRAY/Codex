@@ -164,7 +164,7 @@ pub fn migrate_to_v2(
     let current_version = doc
         .get("mcp_schema_version")
         .and_then(|item| item.as_value())
-        .and_then(|value| value.as_integer())
+        .and_then(toml_edit::Value::as_integer)
         .map(|v| v.max(0) as u32)
         .unwrap_or(1);
 
@@ -200,12 +200,12 @@ pub fn migrate_to_v2(
     if needs_version_bump {
         let msg = if options.dry_run {
             if current_version < 2 {
-                format!("would set mcp_schema_version from {} to 2", current_version)
+                format!("would set mcp_schema_version from {current_version} to 2")
             } else {
                 "would reassert mcp_schema_version = 2".to_string()
             }
         } else if current_version < 2 {
-            format!("mcp_schema_version updated from {} to 2", current_version)
+            format!("mcp_schema_version updated from {current_version} to 2")
         } else {
             "mcp_schema_version reasserted to 2".to_string()
         };

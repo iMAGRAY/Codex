@@ -6,6 +6,9 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitStatus;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -347,19 +350,20 @@ async fn consume_truncated_output(
         ))
     })?;
 
-    let (agg_tx, agg_rx) = async_channel::unbounded::<Vec<u8>>();
+    let (agg_tx, agg_rx) = async_channel::unbounded::<StampedChunk>();
+    let sequence = Arc::new(AtomicU64::new(0));
 
     let stdout_handle = tokio::spawn(read_capped(
         BufReader::new(stdout_reader),
         stdout_stream.clone(),
         false,
-        Some(agg_tx.clone()),
+        Some((agg_tx.clone(), Arc::clone(&sequence))),
     ));
     let stderr_handle = tokio::spawn(read_capped(
         BufReader::new(stderr_reader),
         stdout_stream.clone(),
         true,
-        Some(agg_tx.clone()),
+        Some((agg_tx.clone(), Arc::clone(&sequence))),
     ));
 
     let (exit_status, timed_out) = tokio::select! {
@@ -388,9 +392,18 @@ async fn consume_truncated_output(
 
     drop(agg_tx);
 
-    let mut combined_buf = Vec::with_capacity(AGGREGATE_BUFFER_INITIAL_CAPACITY);
+    let mut combined_chunks = Vec::new();
     while let Ok(chunk) = agg_rx.recv().await {
-        append_all(&mut combined_buf, &chunk);
+        combined_chunks.push(chunk);
+    }
+    combined_chunks.sort_by(|a, b| {
+        a.instant
+            .cmp(&b.instant)
+            .then_with(|| a.sequence.cmp(&b.sequence))
+    });
+    let mut combined_buf = Vec::with_capacity(AGGREGATE_BUFFER_INITIAL_CAPACITY);
+    for chunk in combined_chunks {
+        append_all(&mut combined_buf, &chunk.chunk);
     }
     let aggregated_output = StreamOutput {
         text: combined_buf,
@@ -410,7 +423,7 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
     mut reader: R,
     stream: Option<StdoutStream>,
     is_stderr: bool,
-    aggregate_tx: Option<Sender<Vec<u8>>>,
+    aggregate_tx: Option<(Sender<StampedChunk>, Arc<AtomicU64>)>,
 ) -> io::Result<StreamOutput<Vec<u8>>> {
     let mut buf = Vec::with_capacity(AGGREGATE_BUFFER_INITIAL_CAPACITY);
     let mut tmp = [0u8; READ_CHUNK_SIZE];
@@ -446,8 +459,14 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
             emitted_deltas += 1;
         }
 
-        if let Some(tx) = &aggregate_tx {
-            let _ = tx.send(tmp[..n].to_vec()).await;
+        if let Some((tx, seq)) = &aggregate_tx {
+            let id = seq.fetch_add(1, Ordering::Relaxed);
+            let stamped = StampedChunk {
+                instant: Instant::now(),
+                sequence: id,
+                chunk: tmp[..n].to_vec(),
+            };
+            let _ = tx.send(stamped).await;
         }
 
         append_all(&mut buf, &tmp[..n]);
@@ -458,6 +477,13 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
         text: buf,
         truncated_after_lines: None,
     })
+}
+
+#[derive(Debug)]
+struct StampedChunk {
+    instant: Instant,
+    sequence: u64,
+    chunk: Vec<u8>,
 }
 
 #[cfg(unix)]

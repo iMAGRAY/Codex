@@ -20,6 +20,8 @@ use codex_core::protocol::StreamErrorEvent;
 use codex_core::protocol::TaskCompleteEvent;
 use codex_core::protocol::TurnAbortReason;
 use codex_core::protocol::TurnDiffEvent;
+use codex_core::protocol::UnifiedExecSessionStatus;
+use codex_core::protocol::UnifiedExecSessionsEvent;
 use codex_core::protocol::WebSearchBeginEvent;
 use codex_core::protocol::WebSearchEndEvent;
 use codex_protocol::num_format::format_with_separators;
@@ -28,7 +30,10 @@ use owo_colors::Style;
 use shlex::try_join;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use crate::event_processor::CodexStatus;
 use crate::event_processor::EventProcessor;
@@ -411,6 +416,55 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                 );
                 eprintln!("{unified_diff}");
             }
+            EventMsg::UnifiedExecSessions(UnifiedExecSessionsEvent { sessions }) => {
+                if sessions.is_empty() {
+                    ts_msg!(
+                        self,
+                        "{}",
+                        "unified exec: no active sessions"
+                            .style(self.magenta)
+                            .style(self.italic)
+                    );
+                } else {
+                    ts_msg!(
+                        self,
+                        "{}",
+                        "unified exec sessions"
+                            .style(self.magenta)
+                            .style(self.italic)
+                    );
+                    for session in sessions {
+                        let command = if session.command.is_empty() {
+                            "(detached)".to_string()
+                        } else {
+                            escape_command(&session.command)
+                        };
+                        let status_style = match session.status {
+                            UnifiedExecSessionStatus::Running => self.green,
+                            UnifiedExecSessionStatus::Exited => self.dimmed,
+                        };
+                        let status = format!(
+                            "{}",
+                            format_session_status(session.status).style(status_style)
+                        );
+                        let started = format_timestamp(session.started_at_ms);
+                        let last_output = session
+                            .last_output_at_ms
+                            .map(format_timestamp)
+                            .unwrap_or_else(|| "never".to_string());
+
+                        ts_msg!(
+                            self,
+                            "  [{}] {} — {} (started {}, last output {})",
+                            session.session_id,
+                            status,
+                            command,
+                            started,
+                            last_output,
+                        );
+                    }
+                }
+            }
             EventMsg::ExecApprovalRequest(_) => {
                 // Should we exit?
             }
@@ -577,5 +631,26 @@ fn format_mcp_invocation(invocation: &McpInvocation) -> String {
         format!("{fq_tool_name}()")
     } else {
         format!("{fq_tool_name}({args_str})")
+    }
+}
+
+fn format_session_status(status: UnifiedExecSessionStatus) -> &'static str {
+    match status {
+        UnifiedExecSessionStatus::Running => "running",
+        UnifiedExecSessionStatus::Exited => "exited",
+    }
+}
+
+fn format_timestamp(timestamp_ms: u64) -> String {
+    let timestamp = UNIX_EPOCH + Duration::from_millis(timestamp_ms);
+    match SystemTime::now().duration_since(timestamp) {
+        Ok(elapsed) => {
+            if elapsed.is_zero() {
+                "just now".to_string()
+            } else {
+                format!("{} ago", format_duration(elapsed))
+            }
+        }
+        Err(_) => "just now".to_string(),
     }
 }

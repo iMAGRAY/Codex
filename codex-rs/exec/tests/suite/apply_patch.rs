@@ -37,7 +37,9 @@ fn test_standalone_exec_cli_can_use_apply_patch() -> anyhow::Result<()> {
         .current_dir(tmp.path())
         .assert()
         .success()
-        .stdout("Success. Updated the following files:\nM source.txt\n")
+        .stdout(
+            "Applied operations:\n- update: source.txt (+1, -1)\n✔ Patch applied successfully.\n",
+        )
         .stderr(predicates::str::is_empty());
     assert_eq!(
         fs::read_to_string(absolute_path)?,

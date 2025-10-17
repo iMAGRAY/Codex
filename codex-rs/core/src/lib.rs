@@ -107,5 +107,9 @@ pub use codex_protocol::models::LocalShellExecAction;
 pub use codex_protocol::models::LocalShellStatus;
 pub use codex_protocol::models::ReasoningItemContent;
 pub use codex_protocol::models::ResponseItem;
+pub use unified_exec::UnifiedExecError;
+pub use unified_exec::UnifiedExecOutputWindow;
+pub use unified_exec::UnifiedExecSessionOutput;
+pub use unified_exec::UnifiedExecSessionSnapshot;
 
 pub mod otel_init;

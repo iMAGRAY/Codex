@@ -35,7 +35,10 @@ impl ToolHandler for UnifiedExecHandler {
 
     async fn handle(&self, invocation: ToolInvocation) -> Result<ToolOutput, FunctionCallError> {
         let ToolInvocation {
-            session, payload, ..
+            session,
+            payload,
+            sub_id,
+            ..
         } = invocation;
 
         let args = match payload {
@@ -84,6 +87,7 @@ impl ToolHandler for UnifiedExecHandler {
             .map_err(|err| {
                 FunctionCallError::RespondToModel(format!("unified exec failed: {err:?}"))
             })?;
+        session.publish_unified_exec_sessions(&sub_id).await;
 
         #[derive(serde::Serialize)]
         struct SerializedUnifiedExecResult {

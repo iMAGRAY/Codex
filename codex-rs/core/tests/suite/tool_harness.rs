@@ -12,6 +12,7 @@ use codex_core::protocol::Op;
 use codex_core::protocol::SandboxPolicy;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::plan_tool::StepStatus;
+use core_test_support::assert_exec_summary;
 use core_test_support::assert_regex_match;
 use core_test_support::responses;
 use core_test_support::responses::ev_apply_patch_function_call;
@@ -368,15 +369,15 @@ async fn apply_patch_tool_executes_and_emits_patch_events() -> anyhow::Result<()
     );
     let output_text = extract_output_text(&output_item).expect("output text present");
 
-    let expected_pattern = format!(
+    assert_regex_match(
         r"(?s)^Exit code: 0
 Wall time: [0-9]+(?:\.[0-9]+)? seconds
 Output:
-Success. Updated the following files:
-A {file_name}
-?$"
+",
+        output_text,
     );
-    assert_regex_match(&expected_pattern, output_text);
+    let expected_ops = vec![format!("- add: {file_name} (+1)")];
+    assert_exec_summary(output_text, &expected_ops);
 
     let updated_contents = fs::read_to_string(file_path)?;
     assert_eq!(

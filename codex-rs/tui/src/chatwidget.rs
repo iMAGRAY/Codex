@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use codex_core::config::Config;
 use codex_core::config_types::McpServerConfig;
@@ -41,6 +42,7 @@ use codex_core::protocol::TokenUsage;
 use codex_core::protocol::TokenUsageInfo;
 use codex_core::protocol::TurnAbortReason;
 use codex_core::protocol::TurnDiffEvent;
+use codex_core::protocol::UnifiedExecSessionsEvent;
 use codex_core::protocol::UserMessageEvent;
 use codex_core::protocol::ViewImageToolCallEvent;
 use codex_core::protocol::WebSearchBeginEvent;
@@ -70,6 +72,7 @@ use crate::bottom_pane::BottomPane;
 use crate::bottom_pane::BottomPaneParams;
 use crate::bottom_pane::CancellationEvent;
 use crate::bottom_pane::InputResult;
+use crate::bottom_pane::ProcessOverview;
 use crate::bottom_pane::SelectionAction;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
@@ -92,9 +95,17 @@ use crate::mcp::McpManagerView;
 use crate::mcp::McpWizardDraft;
 use crate::mcp::McpWizardInit;
 use crate::mcp::McpWizardView;
+use crate::process_manager::ProcessManagerEntry;
+use crate::process_manager::ProcessManagerInit;
+use crate::process_manager::ProcessManagerView;
+use crate::process_manager::ProcessOutputData;
+use crate::process_manager::ProcessOutputInit;
+use crate::process_manager::ProcessOutputView;
+use crate::process_manager::ProcessStatus;
 use crate::render::renderable::ColumnRenderable;
 use crate::slash_command::SlashCommand;
 use crate::status::RateLimitSnapshotDisplay;
+use crate::status_indicator_widget::fmt_elapsed_compact;
 use crate::text_formatting::truncate_text;
 use crate::tui::FrameRequester;
 mod interrupts;
@@ -274,6 +285,10 @@ pub(crate) struct ChatWidget {
     ghost_snapshots_disabled: bool,
     // Whether to add a final message separator after the last message
     needs_final_message_separator: bool,
+
+    process_overview_hidden: bool,
+    process_overview_cache: Vec<ProcessManagerEntry>,
+    process_overview_auto_revealed: bool,
 
     last_rendered_width: std::cell::Cell<Option<usize>>,
 }
@@ -966,6 +981,9 @@ impl ChatWidget {
             ghost_snapshots: Vec::new(),
             ghost_snapshots_disabled: true,
             needs_final_message_separator: false,
+            process_overview_hidden: false,
+            process_overview_cache: Vec::new(),
+            process_overview_auto_revealed: false,
             last_rendered_width: std::cell::Cell::new(None),
         }
     }
@@ -1031,6 +1049,9 @@ impl ChatWidget {
             ghost_snapshots: Vec::new(),
             ghost_snapshots_disabled: true,
             needs_final_message_separator: false,
+            process_overview_hidden: false,
+            process_overview_cache: Vec::new(),
+            process_overview_auto_revealed: false,
             last_rendered_width: std::cell::Cell::new(None),
         }
     }
@@ -1063,6 +1084,26 @@ impl ChatWidget {
                 if let Ok((path, info)) = paste_image_to_temp_png() {
                     self.attach_image(path, info.width, info.height, info.encoded_format.label());
                 }
+                return;
+            }
+            KeyEvent {
+                code: KeyCode::Char(c),
+                modifiers,
+                kind: KeyEventKind::Press,
+                ..
+            } if modifiers == (KeyModifiers::ALT | KeyModifiers::SHIFT)
+                && c.eq_ignore_ascii_case(&'p') =>
+            {
+                self.toggle_process_overview_visibility();
+                return;
+            }
+            KeyEvent {
+                code: KeyCode::Char(c),
+                modifiers,
+                kind: KeyEventKind::Press,
+                ..
+            } if modifiers == KeyModifiers::ALT && c.eq_ignore_ascii_case(&'p') => {
+                self.app_event_tx.send(AppEvent::OpenProcessManager);
                 return;
             }
             other if other.kind == KeyEventKind::Press => {
@@ -1462,6 +1503,7 @@ impl ChatWidget {
             EventMsg::ViewImageToolCall(ev) => self.on_view_image_tool_call(ev),
             EventMsg::McpToolCallBegin(ev) => self.on_mcp_tool_call_begin(ev),
             EventMsg::McpToolCallEnd(ev) => self.on_mcp_tool_call_end(ev),
+            EventMsg::UnifiedExecSessions(ev) => self.on_unified_exec_sessions(ev),
             EventMsg::WebSearchBegin(ev) => self.on_web_search_begin(ev),
             EventMsg::WebSearchEnd(ev) => self.on_web_search_end(ev),
             EventMsg::GetHistoryEntryResponse(ev) => self.on_get_history_entry_response(ev),
@@ -1536,6 +1578,13 @@ impl ChatWidget {
             "<< Code review finished >>".to_string(),
         ));
         self.request_redraw();
+    }
+
+    fn on_unified_exec_sessions(&mut self, event: UnifiedExecSessionsEvent) {
+        self.app_event_tx
+            .send(AppEvent::UpdateProcessManagerSessions {
+                sessions: event.sessions,
+            });
     }
 
     fn on_user_message_event(&mut self, event: UserMessageEvent) {
@@ -1930,6 +1979,293 @@ impl ChatWidget {
         };
         self.bottom_pane
             .show_custom_view(Box::new(McpWizardView::new(init)));
+    }
+
+    fn summarize_process_command(command: &[String]) -> String {
+        if command.is_empty() {
+            "(detached)".to_string()
+        } else {
+            command.join(" ")
+        }
+    }
+
+    fn format_elapsed_label(time: SystemTime) -> String {
+        match SystemTime::now().duration_since(time) {
+            Ok(duration) => {
+                if duration.as_secs() == 0 {
+                    "just now".to_string()
+                } else {
+                    format!("{} ago", fmt_elapsed_compact(duration.as_secs()))
+                }
+            }
+            Err(_) => "just now".to_string(),
+        }
+    }
+
+    fn format_optional_elapsed_label(time: Option<SystemTime>) -> String {
+        time.map(Self::format_elapsed_label)
+            .unwrap_or_else(|| "no output yet".to_string())
+    }
+
+    fn process_overview(entries: &[ProcessManagerEntry]) -> Option<ProcessOverview> {
+        if entries.is_empty() {
+            return None;
+        }
+
+        let mut running_entries: Vec<&ProcessManagerEntry> = entries
+            .iter()
+            .filter(|entry| entry.status == ProcessStatus::Running)
+            .collect();
+        let mut completed_entries: Vec<&ProcessManagerEntry> = entries
+            .iter()
+            .filter(|entry| entry.status == ProcessStatus::Exited)
+            .collect();
+
+        let running_count = running_entries.len();
+        let completed_count = completed_entries.len();
+
+        let header = match (running_count, completed_count) {
+            (0, 0) => "Processes: none".to_string(),
+            (r, 0) => {
+                let label = if r == 1 { "process" } else { "processes" };
+                format!("Processes: {r} running {label}")
+            }
+            (0, c) => {
+                let label = if c == 1 { "process" } else { "processes" };
+                format!("Processes: {c} done {label}")
+            }
+            (r, c) => format!("Processes: {r} running · {c} done"),
+        };
+
+        running_entries.sort_by_key(|entry| entry.last_output_at.unwrap_or(entry.started_at));
+        running_entries.reverse();
+        const MAX_RUNNING_DETAILS: usize = 3;
+        let running_details: Vec<String> = running_entries
+            .iter()
+            .take(MAX_RUNNING_DETAILS)
+            .map(|entry| {
+                let command = Self::summarize_process_command(&entry.command);
+                let started = Self::format_elapsed_label(entry.started_at);
+                let last_output = Self::format_optional_elapsed_label(entry.last_output_at);
+                format!("{command} · started {started} · last output {last_output}")
+            })
+            .collect();
+        let running_more = running_count.saturating_sub(running_details.len());
+
+        completed_entries.sort_by_key(|entry| entry.last_output_at.unwrap_or(entry.started_at));
+        completed_entries.reverse();
+        const MAX_COMPLETED_DETAILS: usize = 3;
+        let completed_details: Vec<String> = completed_entries
+            .iter()
+            .take(MAX_COMPLETED_DETAILS)
+            .map(|entry| {
+                let command = Self::summarize_process_command(&entry.command);
+                let finished = Self::format_optional_elapsed_label(entry.last_output_at);
+                format!("{command} · finished {finished}")
+            })
+            .collect();
+        let completed_more = completed_count.saturating_sub(completed_details.len());
+
+        let footer_summary = if running_count == 0 && completed_count == 0 {
+            None
+        } else {
+            let mut parts = Vec::new();
+            if running_count > 0 {
+                parts.push(format!("● {running_count} running"));
+            }
+            if completed_count > 0 {
+                parts.push(format!("○ {completed_count} done"));
+            }
+            Some(parts.join("  "))
+        };
+
+        Some(ProcessOverview {
+            header,
+            running_details,
+            running_more,
+            completed_details,
+            completed_more,
+            footer_summary,
+        })
+    }
+
+    fn apply_process_overview(&mut self, entries: &[ProcessManagerEntry]) {
+        let had_running = self
+            .process_overview_cache
+            .iter()
+            .any(|entry| entry.status == ProcessStatus::Running);
+
+        if entries.is_empty() {
+            self.bottom_pane.set_process_overview(None);
+            self.process_overview_auto_revealed = false;
+            self.process_overview_cache.clear();
+            return;
+        }
+
+        let has_running = entries
+            .iter()
+            .any(|entry| entry.status == ProcessStatus::Running);
+
+        if has_running && !had_running {
+            // A fresh background task just started; ensure the summary is visible again.
+            if self.process_overview_hidden {
+                self.add_info_message(
+                    "Background process started; showing process summary.".to_string(),
+                    None,
+                );
+            }
+            self.process_overview_hidden = false;
+            self.process_overview_auto_revealed = false;
+        }
+
+        self.process_overview_cache = entries.to_vec();
+
+        let has_running = entries
+            .iter()
+            .any(|entry| entry.status == ProcessStatus::Running);
+
+        if self.process_overview_hidden {
+            if has_running && !self.process_overview_auto_revealed {
+                self.process_overview_hidden = false;
+                self.process_overview_auto_revealed = true;
+                self.add_info_message(
+                    "New background process started; showing process summary.".to_string(),
+                    None,
+                );
+            } else {
+                self.bottom_pane.set_process_overview(None);
+                return;
+            }
+        } else {
+            self.process_overview_auto_revealed = false;
+        }
+
+        let overview = Self::process_overview(entries);
+        self.bottom_pane.set_process_overview(overview);
+        self.request_redraw();
+    }
+
+    pub(crate) fn refresh_process_overview(&mut self, entries: &[ProcessManagerEntry]) {
+        self.apply_process_overview(entries);
+    }
+
+    fn toggle_process_overview_visibility(&mut self) {
+        if self.process_overview_hidden {
+            self.process_overview_hidden = false;
+            self.process_overview_auto_revealed = false;
+            if self.process_overview_cache.is_empty() {
+                self.app_event_tx.send(AppEvent::RefreshProcessOverview);
+            } else {
+                let cached = self.process_overview_cache.clone();
+                self.apply_process_overview(&cached);
+                self.app_event_tx.send(AppEvent::RefreshProcessOverview);
+            }
+        } else {
+            self.process_overview_hidden = true;
+            self.process_overview_auto_revealed = true;
+            self.bottom_pane.set_process_overview(None);
+            self.add_info_message(
+                "Process summary hidden. Press Alt+Shift+P to show it again.".to_string(),
+                None,
+            );
+            self.request_redraw();
+        }
+    }
+
+    pub(crate) fn show_process_manager(&mut self, entries: Vec<ProcessManagerEntry>) {
+        self.process_overview_hidden = false;
+        self.process_overview_auto_revealed = false;
+        self.apply_process_overview(&entries);
+        let init = ProcessManagerInit {
+            app_event_tx: self.app_event_tx.clone(),
+            entries,
+        };
+        self.bottom_pane
+            .show_custom_view(Box::new(ProcessManagerView::new(init)));
+    }
+
+    pub(crate) fn update_process_manager(&mut self, entries: Vec<ProcessManagerEntry>) {
+        self.apply_process_overview(&entries);
+        if let Some(view) = self.bottom_pane.active_view_mut()
+            && let Some(manager) = view.as_any_mut().downcast_mut::<ProcessManagerView>()
+        {
+            manager.set_entries(entries);
+            self.request_redraw();
+        }
+    }
+
+    pub(crate) fn show_unified_exec_output(
+        &mut self,
+        entry: ProcessManagerEntry,
+        data: ProcessOutputData,
+    ) {
+        let init = ProcessOutputInit {
+            app_event_tx: self.app_event_tx.clone(),
+            entry,
+            data,
+        };
+        self.bottom_pane
+            .show_custom_view(Box::new(ProcessOutputView::new(init)));
+    }
+
+    pub(crate) fn update_unified_exec_output(
+        &mut self,
+        entry: ProcessManagerEntry,
+        data: ProcessOutputData,
+    ) {
+        if let Some(view) = self.bottom_pane.active_view_mut()
+            && let Some(output_view) = view.as_any_mut().downcast_mut::<ProcessOutputView>()
+            && output_view.session_id() == entry.session_id
+        {
+            output_view.update_entry(entry);
+            output_view.set_output_data(data);
+            self.request_redraw();
+        } else {
+            self.show_unified_exec_output(entry, data);
+        }
+    }
+
+    pub(crate) fn open_unified_exec_input_prompt(&mut self, session_id: i32) {
+        let title = format!("Send input to session {session_id}");
+        let placeholder = "Input will be written to the process stdin".to_string();
+        let context = Some(format!("Session ID: {session_id}"));
+        let app_event_tx = self.app_event_tx.clone();
+        let view = CustomPromptView::new(
+            title,
+            placeholder,
+            context,
+            Box::new(move |text| {
+                app_event_tx.send(AppEvent::SendUnifiedExecInput {
+                    session_id,
+                    input: text,
+                });
+            }),
+        );
+        self.bottom_pane.show_custom_view(Box::new(view));
+    }
+
+    pub(crate) fn open_unified_exec_export_prompt(&mut self, session_id: i32) {
+        let title = format!("Export log for session {session_id}");
+        let placeholder = "Path to save the log (relative or absolute)".to_string();
+        let context = Some("Example: logs/unified-exec-session.log".to_string());
+        let app_event_tx = self.app_event_tx.clone();
+        let view = CustomPromptView::new(
+            title,
+            placeholder,
+            context,
+            Box::new(move |text| {
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    return;
+                }
+                let destination = PathBuf::from(trimmed);
+                app_event_tx.send(AppEvent::ExportUnifiedExecLog {
+                    session_id,
+                    destination,
+                });
+            }),
+        );
+        self.bottom_pane.show_custom_view(Box::new(view));
     }
 
     pub(crate) fn set_mcp_servers(

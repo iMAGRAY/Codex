@@ -23,7 +23,8 @@ pub struct ConfigProfile {
     pub include_plan_tool: Option<bool>,
     pub include_apply_patch_tool: Option<bool>,
     pub include_view_image_tool: Option<bool>,
-    pub experimental_use_unified_exec_tool: Option<bool>,
+    #[serde(alias = "experimental_use_unified_exec_tool")]
+    pub use_unified_exec_tool: Option<bool>,
     pub experimental_use_exec_command_tool: Option<bool>,
     pub experimental_use_rmcp_client: Option<bool>,
     pub experimental_use_freeform_apply_patch: Option<bool>,

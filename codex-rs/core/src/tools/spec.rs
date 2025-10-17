@@ -29,7 +29,7 @@ pub(crate) struct ToolsConfig {
     pub apply_patch_tool_type: Option<ApplyPatchToolType>,
     pub web_search_request: bool,
     pub include_view_image_tool: bool,
-    pub experimental_unified_exec_tool: bool,
+    pub use_unified_exec_tool: bool,
     pub experimental_supported_tools: Vec<String>,
 }
 
@@ -45,7 +45,7 @@ impl ToolsConfig {
             features,
         } = params;
         let use_streamable_shell_tool = features.enabled(Feature::StreamableShell);
-        let experimental_unified_exec_tool = features.enabled(Feature::UnifiedExec);
+        let use_unified_exec_tool = features.enabled(Feature::UnifiedExec);
         let include_plan_tool = features.enabled(Feature::PlanTool);
         let include_apply_patch_tool = features.enabled(Feature::ApplyPatchFreeform);
         let include_web_search_request = features.enabled(Feature::WebSearchRequest);
@@ -77,7 +77,7 @@ impl ToolsConfig {
             apply_patch_tool_type,
             web_search_request: include_web_search_request,
             include_view_image_tool,
-            experimental_unified_exec_tool,
+            use_unified_exec_tool,
             experimental_supported_tools: model_family.experimental_supported_tools.clone(),
         }
     }
@@ -741,7 +741,7 @@ pub(crate) fn build_specs(
     let view_image_handler = Arc::new(ViewImageHandler);
     let mcp_handler = Arc::new(McpHandler);
 
-    if config.experimental_unified_exec_tool {
+    if config.use_unified_exec_tool {
         builder.push_spec(create_unified_exec_tool());
         builder.register_handler("unified_exec", unified_exec_handler);
     } else {

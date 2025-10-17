@@ -2,11 +2,12 @@ use crate::bottom_pane::ApprovalRequest;
 use crate::render::renderable::Renderable;
 use crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
+use std::any::Any;
 
 use super::CancellationEvent;
 
 /// Trait implemented by every view that can be shown in the bottom pane.
-pub(crate) trait BottomPaneView: Renderable {
+pub(crate) trait BottomPaneView: Renderable + Any {
     /// Handle a key event while the view is active. A redraw is always
     /// scheduled after this call.
     fn handle_key_event(&mut self, _key_event: KeyEvent) {}
@@ -39,5 +40,11 @@ pub(crate) trait BottomPaneView: Renderable {
         request: ApprovalRequest,
     ) -> Option<ApprovalRequest> {
         Some(request)
+    }
+}
+
+impl dyn BottomPaneView {
+    pub(crate) fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

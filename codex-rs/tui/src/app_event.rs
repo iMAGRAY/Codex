@@ -9,8 +9,10 @@ use crate::bottom_pane::ApprovalRequest;
 use crate::history_cell::HistoryCell;
 use crate::mcp::McpWizardDraft;
 
+use codex_core::UnifiedExecOutputWindow;
 use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
+use codex_core::protocol::UnifiedExecSessionState;
 use codex_core::protocol_config_types::ReasoningEffort;
 
 #[allow(clippy::large_enum_variant)]
@@ -92,6 +94,19 @@ pub(crate) enum AppEvent {
     /// Open MCP manager panel when experimental overhaul is enabled.
     OpenMcpManager,
 
+    /// Open the unified exec process manager overlay.
+    OpenProcessManager,
+
+    /// Open an input prompt targeting a unified exec session.
+    OpenUnifiedExecInputPrompt {
+        session_id: i32,
+    },
+
+    /// Open the output viewer for a specific unified exec session.
+    OpenUnifiedExecOutput {
+        session_id: i32,
+    },
+
     /// Open the MCP wizard with optional template hint and pre-filled draft.
     OpenMcpWizard {
         template_id: Option<String>,
@@ -111,5 +126,51 @@ pub(crate) enum AppEvent {
     /// Remove a configured MCP server.
     RemoveMcpServer {
         name: String,
+    },
+
+    /// Send input to a running unified exec session.
+    SendUnifiedExecInput {
+        session_id: i32,
+        input: String,
+    },
+
+    /// Kill a running unified exec session.
+    KillUnifiedExecSession {
+        session_id: i32,
+    },
+
+    /// Remove a unified exec session from the manager (after completion).
+    RemoveUnifiedExecSession {
+        session_id: i32,
+    },
+
+    /// Update the process manager with the latest unified exec snapshot.
+    UpdateProcessManagerSessions {
+        sessions: Vec<UnifiedExecSessionState>,
+    },
+
+    /// Refresh the process overview badge without opening the manager UI.
+    RefreshProcessOverview,
+
+    /// Refresh the output view for a running session.
+    RefreshUnifiedExecOutput {
+        session_id: i32,
+    },
+
+    /// Load a specific window of output for a unified exec session.
+    LoadUnifiedExecOutputWindow {
+        session_id: i32,
+        window: UnifiedExecOutputWindow,
+    },
+
+    /// Prompt the user for a destination path to export a unified exec log.
+    OpenUnifiedExecExportPrompt {
+        session_id: i32,
+    },
+
+    /// Export the unified exec log to a user-provided destination.
+    ExportUnifiedExecLog {
+        session_id: i32,
+        destination: PathBuf,
     },
 }

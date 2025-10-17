@@ -73,3 +73,40 @@ You can invoke apply_patch like:
 ```
 shell {"command":["apply_patch","*** Begin Patch\n*** Add File: hello.txt\n+Hello, world!\n*** End Patch\n"]}
 ```
+
+### Output
+
+On success the tool prints a begin_patch-style summary to stdout so you always know what happened without re-reading the files:
+
+```
+Applied operations:
+- add: hello.txt (+1)
+- update: src/main.rs (+3, -1)
+✔ Patch applied successfully.
+```
+
+Each bullet lists the action (`add`, `update`, `move`, or `delete`) plus the per-file line deltas.
+
+Move operations appear as `- move: source -> dest (+added, -removed)` and combine renames with content edits in a single entry. Deletes show their line count (`- delete: path (-N)`). When a patch touches multiple files the summary lists one bullet per file in patch order so you can skim the outcome at a glance. All filesystem updates are applied atomically: every file is written through a temporary file and the original contents are backed up, so a failure automatically rolls the workspace back to its pre-patch state.
+
+If patch verification fails, `apply_patch` prints the diagnostic to stderr and leaves the filesystem unchanged.
+
+On success, any touched files are automatically staged in git (when run inside a repository), so your workspace is ready for a commit without additional `git add` commands.
+### CLI options
+
+The `apply_patch` binary accepts several quality-of-life flags:
+
+- `-f/--patch-file <path>` – load the patch from disk instead of argv/STDIN.
+- `-C/--root <dir>` – execute all file operations relative to the provided root.
+- `--dry-run` – plan the operations without writing to disk (the summary shows `planned` statuses).
+- `--output-format {human|json|both}` – control whether to emit JSON, the human summary, or both (`human` by default).
+- `--json-path <path>` – write the JSON report to a file regardless of the chosen output format.
+- `--no-summary` – suppress the human summary when `human` output is enabled.
+- `--machine` – emit a single-line JSON object following the `apply_patch/v2` schema (no human summary, ignores `--output-format`).
+- `--log-dir <path>` – write structured JSON logs to the given directory (default: `reports/logs`).
+- `--log-retention-days <days>` – prune log files older than the given number of days (default: 14).
+- `--log-keep <count>` – keep at most this many log files after pruning (default: 200).
+- `--no-logs` – skip writing per-run logs.
+- `--conflict-dir <path>` – write conflict diff hints to this directory when a patch fails (default: `reports/conflicts`).
+
+The JSON report mirrors begin_patch’s schema (`status`, `mode`, `duration_ms`, per-file operations, and `errors`).

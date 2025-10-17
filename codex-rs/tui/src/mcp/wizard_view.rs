@@ -416,13 +416,19 @@ impl McpWizardView {
             FieldKind::AuthType => {
                 self.start_variant_select(
                     FieldKind::AuthType,
-                    AUTH_TYPES.iter().map(|s| s.to_string()).collect(),
+                    AUTH_TYPES
+                        .iter()
+                        .map(std::string::ToString::to_string)
+                        .collect(),
                 );
             }
             FieldKind::HealthType => {
                 self.start_variant_select(
                     FieldKind::HealthType,
-                    HEALTH_TYPES.iter().map(|s| s.to_string()).collect(),
+                    HEALTH_TYPES
+                        .iter()
+                        .map(std::string::ToString::to_string)
+                        .collect(),
                 );
             }
             FieldKind::Transport => {
@@ -836,43 +842,44 @@ struct FieldEntry {
 }
 
 fn field_entries(draft: &McpWizardDraft) -> Vec<FieldEntry> {
-    let mut entries = Vec::new();
-    entries.push(FieldEntry {
-        kind: FieldKind::Template,
-        label: "Template",
-        value: draft
-            .template_id
-            .clone()
-            .unwrap_or_else(|| "manual".to_string()),
-        enabled: true,
-    });
-    entries.push(FieldEntry {
-        kind: FieldKind::Name,
-        label: "Name",
-        value: draft.name.clone(),
-        enabled: true,
-    });
-    entries.push(FieldEntry {
-        kind: FieldKind::DisplayName,
-        label: "Display name",
-        value: draft
-            .display_name
-            .clone()
-            .unwrap_or_else(|| "-".to_string()),
-        enabled: true,
-    });
-    entries.push(FieldEntry {
-        kind: FieldKind::Category,
-        label: "Category",
-        value: draft.category.clone().unwrap_or_else(|| "-".to_string()),
-        enabled: true,
-    });
-    entries.push(FieldEntry {
-        kind: FieldKind::Transport,
-        label: "Transport",
-        value: draft.transport_label().to_string(),
-        enabled: true,
-    });
+    let mut entries = vec![
+        FieldEntry {
+            kind: FieldKind::Template,
+            label: "Template",
+            value: draft
+                .template_id
+                .clone()
+                .unwrap_or_else(|| "manual".to_string()),
+            enabled: true,
+        },
+        FieldEntry {
+            kind: FieldKind::Name,
+            label: "Name",
+            value: draft.name.clone(),
+            enabled: true,
+        },
+        FieldEntry {
+            kind: FieldKind::DisplayName,
+            label: "Display name",
+            value: draft
+                .display_name
+                .clone()
+                .unwrap_or_else(|| "-".to_string()),
+            enabled: true,
+        },
+        FieldEntry {
+            kind: FieldKind::Category,
+            label: "Category",
+            value: draft.category.clone().unwrap_or_else(|| "-".to_string()),
+            enabled: true,
+        },
+        FieldEntry {
+            kind: FieldKind::Transport,
+            label: "Transport",
+            value: draft.transport_label().to_string(),
+            enabled: true,
+        },
+    ];
 
     match draft.transport_kind {
         TransportKind::Stdio => {
@@ -1271,7 +1278,7 @@ fn split_items(input: &str) -> Vec<String> {
         .split(|c: char| c == ',' || c.is_whitespace())
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
@@ -1279,7 +1286,7 @@ fn parse_key_values(input: &str) -> anyhow::Result<BTreeMap<String, String>> {
     let mut map = BTreeMap::new();
     for raw in input
         .split(['\n', ','])
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
     {
         let mut parts = raw.splitn(2, '=');
@@ -1290,7 +1297,7 @@ fn parse_key_values(input: &str) -> anyhow::Result<BTreeMap<String, String>> {
             .ok_or_else(|| anyhow!("Entries must be KEY=VALUE"))?;
         let value = parts
             .next()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .ok_or_else(|| anyhow!("Entries must be KEY=VALUE"))?;
         map.insert(key.to_string(), value);
     }
@@ -1436,10 +1443,12 @@ mod tests {
         let mut auth_env = BTreeMap::new();
         auth_env.insert("TOKEN".to_string(), "${TOKEN}".to_string());
 
-        let mut draft = McpWizardDraft::default();
-        draft.name = "anthropic-mcp".to_string();
-        draft.template_id = Some("anthropic/cli".to_string());
-        draft.transport_kind = TransportKind::Stdio;
+        let mut draft = McpWizardDraft {
+            name: "anthropic-mcp".to_string(),
+            template_id: Some("anthropic/cli".to_string()),
+            transport_kind: TransportKind::Stdio,
+            ..McpWizardDraft::default()
+        };
         draft.stdio.command = "anthropic-mcp".to_string();
         draft.stdio.args = vec![
             "--serve".to_string(),
